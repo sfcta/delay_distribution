@@ -2,9 +2,18 @@
     teo@sfcta.org, 8/26/2013
 """
 
-VERBOSITY = 5
+import math, decimal
+from decimal import Decimal
+
+VERBOSITY = 0                               # higher values will produce more feedback (0-10)
+decimal.getcontext().prec = 4               # decimal precision
+APPROXIMATE_CERTAINTY = 1-Decimal(0.1)**(decimal.getcontext().prec-2)
+                                            
 
 USAGE = """
+
+Delay Distribution Generator: Calculates cumulative distribution given
+various elements of delay. Accurate to 1-second resolution.
 
 USAGE:
 
@@ -27,36 +36,85 @@ input files:
                     - columns: Name, Fixed delay, Wait probability, Max wait
                     - values in seconds (except probability)
                 PedXings[scenario_name].csv
-                    - columns: Name, Delay probability, Max delay
+                    - columns: Name, Delay probability, Max delay (seconds)
                 StationsStops[scenario_name].csv
-                    - columns: Name, Access doors, Hourly boardings,
-                               Hourly alightings
-                    - values count of doors and rates per hour                
+                    - columns: Name, Fixed delay (seconds), Number of doors,
+                               Hourly boardings, Hourly alightings,
+                               Boarding time per passenger per door (seconds),
+                               Alighting time per passenger per door (seconds),
+                               Mean headway (minutes),
+                               Standard deviation of headway (minutes),
+                               Stop requirement
+                                   (1 or TRUE or YES if stop is required;
+                                    0 or FALSE or NO if stop can be skipped
+                                    when no pax wish to board or alight)
 """
 
 def assert_numeric(obj):
-    if not isinstance(obj, (int, long, float)):
+    if not isinstance(obj, (int, long, float, Decimal)):
         raise AssertionError('Data error: ' + str(obj) + ' is not a number')
+
+def assert_decimal(obj):
+    if not isinstance(obj, Decimal):
+        if not isinstance(obj, (int, long, float)):
+            raise AssertionError('Data error: ' + str(obj) + ' is not a number')
+        raise AssertionError('Coding error: ' + str(obj) + ' has not been converted to Decimal')
+
+
+
+class HeadwayDistribution:
+    """ Duration object for headways
+        Requires mean and standard deviation of headways, in seconds
+        Note: Only calculates distribution of headways up to APPROXIMATE_CERTAINTY
+    """
+    def __init__(self, mu, sigma):
+        if(VERBOSITY > 3):
+            print 'creating headway distribution object,'
+            print 'average delay: ' + str(mu)
+            print 'standard deviation: ' + str(sigma)
+        assert_numeric(mu)
+        assert_numeric(sigma)
+        self.mean = Decimal(mu)
+        self.variance = Decimal(sigma)**2
+        self.probability = []
+
+        # normal distribution
+        headway_sec = 0
+        cum_prob = Decimal(0)
+        while(cum_prob < APPROXIMATE_CERTAINTY):
+            this_prob = Decimal( math.exp(-1 * (headway_sec-self.mean ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
+            self.probability.append(this_prob)
+            cum_prob += this_prob
+
+    def prob(self, headway_sec):
+        try:
+            return self.probability[headway_sec]
+        except IndexError:
+            return 0
+
+    def max_duration(self):
+        return -1 + len(self.probability)
+
 
 class TrafficSignal:
     """ Delay object for traffic signals
         Requires cycle time, green time, and any fixed delay beyond waiting for green (all in seconds)
     """
-    def __init__(self, cycle_time, green_time, fixed_delay=0):
-        assert_numeric(cycle_time)
-        assert_numeric(green_time)
-        assert_numeric(fixed_delay)
+    def __init__(self, cycle_time, green_time, fixed_delay=Decimal(0)):
         if(VERBOSITY > 3):
             print 'creating signal object,'
             print 'cycle time: ' + str(cycle_time)
             print 'green time: ' + str(green_time)
             print 'fixed time: ' + str(fixed_delay)
+        assert_decimal(cycle_time)
+        assert_decimal(green_time)
+        assert_decimal(fixed_delay)
         self.cycle = cycle_time
         self.green = green_time
         self.addl_fixed = fixed_delay
         self.probability = []
         delay_sec = 0
-        cum_prob = 0
+        cum_prob = Decimal(0)
         while cum_prob < 1:
             if(VERBOSITY > 8):
                 print 'cum_prob=' + str(cum_prob)
@@ -64,12 +122,12 @@ class TrafficSignal:
             if(delay_sec < self.addl_fixed):
                 self.probability.append(0)      # impossible to have delay less than fixed
             elif(delay_sec == self.addl_fixed):
-                pgreen = 1.0*self.green/self.cycle # caveat: doesn't consider progression.  Assumes complete independence among signals, which is probably appropriate given that there is at least one stop between signals in each scenario.
+                pgreen = self.green/self.cycle  # caveat: doesn't consider progression.  Assumes complete independence among signals, which is probably appropriate given that there is at least one stop between signals in each scenario.
                 self.probability.append(pgreen) # probability of minimum delay (arrive at green light)
                 cum_prob += pgreen
             else:
-                self.probability.append(1.0/self.cycle)
-                cum_prob += 1.0/self.cycle
+                self.probability.append(1/self.cycle)
+                cum_prob += 1/self.cycle
             delay_sec += 1
 
     def prob(self, delay_sec):
@@ -82,22 +140,193 @@ class TrafficSignal:
         return -1 + len(self.probability)
 
 
+class TrainStation:
+    """ Delay object for train stations
+        Requires fixed delay, hourly boardings, hourly alightings, number of doors,
+        boarding time per pax per door, alighting time per pax per door,
+        headway object (must have prob() function that returns the probability of given headway, in seconds, as passed).
+        Optional: Stop requirement (defaults to False) - means the train stops even if no passengers board or alight
+        Note: probabilities precise only as specified by APPROXIMATE_CERTAINTY
+    """
+    def __init__(self, fixed_delay, doors, board_demand, alight_demand, board_pace, alight_pace, headway_obj, required_stop=False, max_delay=86400):
+        if(VERBOSITY > 3):
+            print 'creating train station object,'
+            print 'fixed delay: ' + str(fixed_delay)
+            print 'board demand: ' + str(board_demand)
+            print 'board capacity: ' + str(board_pace) + ' (per door)'
+        assert_decimal(fixed_delay)
+        assert_decimal(board_demand)
+        assert_decimal(alight_demand)
+        assert_decimal(doors)
+        assert_decimal(board_pace)
+        assert_decimal(alight_pace)
+        assert_numeric(max_delay)
+        self.required = required_stop   # boolean
+        self.addl_fixed = fixed_delay
+        self.hourly_board = board_demand
+        self.hourly_alight = alight_demand
+        self.train_doors = doors
+        self.board_sec = board_pace
+        self.alight_sec = alight_pace
+        self.max_cum_delay = Decimal(max_delay)
+        self.extract_headway_probs(headway_obj)
+        self.calc_pax_distrib()         # calculate distribution of boarding and alighting passenger counts
+        self.calculate_delay_probs()
+        
+    def extract_headway_probs(self, headway_obj):
+        headway_sec = 0
+        cum_prob = Decimal(0)
+        self.headways = []
+        while(cum_prob < 1 and headway_sec < self.max_cum_delay):
+            this_prob = Decimal(headway_obj.prob(headway_sec))
+            if(this_prob > 0):
+                self.headways.append([headway_sec, this_prob])
+                cum_prob += this_prob
+                if(VERBOSITY > 9):
+                    print 'found headway ' + str(headway_sec) + ' with probability ' + str(this_prob)
+            headway_sec += 1
+        self.headways_cum_prob = cum_prob
+
+    def calc_pax_distrib(self):
+        board_pax = 0
+        alight_pax = 0
+        self.board_pax_prob = []
+        self.alight_pax_prob = []
+
+        # if no passengers
+        if(self.hourly_board == 0):
+            self.board_pax_prob.append(1)
+            cum_prob = 1
+        else:
+            # poisson process for boarding pax
+            cum_prob = Decimal(0)
+            while(cum_prob < APPROXIMATE_CERTAINTY*self.headways_cum_prob):
+                for headway in self.headways:
+                    headway_hrs = Decimal(headway[0])/60
+                    headway_prob = headway[1]
+                    try:
+                        this_board_prob = headway_prob * Decimal(math.exp(-1*self.hourly_board*headway_hrs)) * ((self.hourly_board*headway_hrs)**board_pax) / Decimal(math.factorial(board_pax))
+                    except decimal.InvalidOperation:
+                        this_board_prob = 0
+                    while(True):
+                        try:
+                            self.board_pax_prob[board_pax] += this_board_prob
+                            break
+                        except IndexError:
+                            self.board_pax_prob.append(0)
+                    cum_prob += this_board_prob
+                board_pax += 1
+        self.cum_boarding_prob = cum_prob
+        if(VERBOSITY > 5):
+            print 'cumulative boarding probability: ' + str(cum_prob)
+
+        # if no passengers
+        if(self.hourly_alight == 0):
+            self.alight_pax_prob.append(1)
+            cum_prob = 1
+        else:
+            # poisson process for alighting pax
+            cum_prob = Decimal(0)
+            while(cum_prob < APPROXIMATE_CERTAINTY*self.headways_cum_prob):
+                for headway in self.headways:
+                    headway_hrs = Decimal(headway[0])/60
+                    headway_prob = headway[1]
+                    if(VERBOSITY > 8):
+                        print 'calculating alighting probability for:'
+                        print 'headway (hrs), ' + str(headway_hrs) + '; headway probability, ' + str(headway_prob)
+                        print 'hourly alightings, ' + str(self.hourly_alight) + '; alighting passengers, ' + str(alight_pax)
+                    try:
+                        this_alight_prob = headway_prob * Decimal(math.exp(-1*self.hourly_alight*headway_hrs)) * ((self.hourly_alight*headway_hrs)**alight_pax) / Decimal(math.factorial(alight_pax))
+                    except decimal.InvalidOperation:
+                        this_alight_prob = 0
+                    while(True):
+                        try:
+                            self.alight_pax_prob[alight_pax] += this_alight_prob
+                            break
+                        except IndexError:
+                            self.alight_pax_prob.append(0)
+                    cum_prob += this_alight_prob
+                alight_pax += 1
+        self.cum_alighting_prob = cum_prob
+        if(VERBOSITY > 5):
+            print 'cumulative alighting probability: ' + str(cum_prob)
+
+    def calculate_delay_probs(self):
+        delay_probs = []
+        
+        # probability of zero delay (no stop)
+        if(self.required):
+            delay_probs.append(0)   # impossible to have no delay if stop is required
+        else:
+            delay_probs.append(self.board_pax_prob[0]*self.alight_pax_prob[0]) # no delay if 0 pax board and 0 pax alight
+            
+        # impossible to have delay less than fixed delay. zero out probabilities from 1 sec delay to fixed delay.
+        delay_sec = 1
+        while(delay_sec < int(self.addl_fixed)):
+            delay_probs.append(0)
+            delay_sec += 1
+
+        # fixed delay will occur if train is required to stop and no pax board or alight
+        if(self.required):
+            delay_probs.append(self.board_pax_prob[0]*self.alight_pax_prob[0])
+        else:
+            delay_probs.append(0)   # non-required stops will be skipped if no pax board or alight
+
+        # set cumulative delay probabilities for each possible number of boarding or alighting pax
+        for board_pax in range(len(self.board_pax_prob)):
+            board_delay = board_pace*board_pax/self.train_doors
+            board_delay_prob = self.board_pax_prob[board_pax]
+            for alight_pax in range(len(self.alight_pax_prob)):
+                alight_delay = alight_pace*alight_pax/self.train_doors
+                alight_delay_prob = self.alight_pax_prob[alight_pax]
+                # we already handled the case where no pax board or alight
+                if(board_pax == 0 and alight_pax == 0):
+                    continue
+                # now assign the delay probability
+                total_delay_sec = int(board_delay + alight_delay + self.addl_fixed)
+                this_prob = board_delay_prob * alight_delay_prob
+                while(True):
+                    try:
+                        delay_probs[total_delay_sec] += this_prob
+                        break
+                    except IndexError:
+                        delay_probs.append(0)
+                if(VERBOSITY > 6):
+                    print 'set boarding and alighting probability of ' + str(this_prob) + ' for ' + str(total_delay_sec) + ' sec of delay'
+                        
+        # probabilities all calculated!
+        self.probability = delay_probs
+
+
+    def prob(self, delay_sec):
+        try:
+            return self.probability[delay_sec]
+        except IndexError:
+            return 0
+
+    def max_delay(self):
+        return -1 + len(self.probability)
+
+
+
 class CumulativeDistribution:
     """ Calculates the cumulative distribution of delay, given components of delay
         Requires a set of one or more objects which must each have a prob() function
         that returns the probability of delay, in seconds, as passed to the function
     """
     def __init__(self, delay_obj_list, max_delay=86400):
+        if(VERBOSITY > 3):
+            print 'creating cumulative distribution object'
         self.partial_probs = []
-        self.max_cum_delay = max_delay
+        self.max_cum_delay = Decimal(max_delay)
         for trial in range(len(delay_obj_list)):
             delay_obj = delay_obj_list[trial]
             self.partial_probs.append([])
             delay_sec = 0
-            cum_prob = 0
+            cum_prob = Decimal(0)
             while cum_prob < 1:
                 if(delay_sec >= self.max_cum_delay):
-                    print 'Coding error! Cumulative delay of ' + delay_sec + ' seconds exceeds maximum.'
+                    print 'Coding error! Cumulative delay of ' + str(delay_sec) + ' seconds exceeds maximum.'
                     return
                 this_prob = delay_obj.prob(delay_sec)
                 self.partial_probs[trial].append(this_prob)
@@ -168,9 +397,9 @@ if __name__ == "__main__":
             header = signal_reader.next() # throw away the header as it doesn't contain data
             for row in signal_reader:
                 name        = row[0]
-                cycle_time  = float(row[1])
-                green_time  = float(row[2])
-                fixed_time  = float(row[3])
+                cycle_time  = Decimal(row[1])
+                green_time  = Decimal(row[2])
+                fixed_time  = Decimal(row[3])
                 TrafficSignals.append(TrafficSignal(cycle_time, green_time, fixed_time))
                 if(VERBOSITY > 1):
                     print 'Read traffic signal: ' + name
@@ -199,10 +428,93 @@ if __name__ == "__main__":
     incl_PedXings = False
 
     # Process transit stations / stops info
-    incl_StationsStops = False
+    incl_StationsStops = True
+    try:
+        with open(StationsStops_path, 'rb') as StationsStops_csv:
+            TrainStations = []
+            stations_reader = csv.reader(StationsStops_csv, dialect='excel')
+            header = stations_reader.next() # throw away the header as it doesn't contain data
+            for row in stations_reader:
+                name        = row[0]
+                fixed_delay = Decimal(row[1])
+                num_doors   = Decimal(row[2])
+                hrly_board  = Decimal(row[3])
+                hrly_alight = Decimal(row[4])
+                board_pace  = Decimal(row[5])
+                alight_pace = Decimal(row[6])
+                headway_avg = Decimal(row[7])
+                headway_sd  = Decimal(row[8])
+                stop_reqd   = row[9]
+                if(stop_reqd.upper() in ('1','TRUE','YES')):
+                    stop_reqd = True
+                elif(stop_reqd.upper() in ('0','FALSE','NO')):
+                    stop_reqd = False
+                else:
+                    raise AssertionError('Data error: ' + stop_reqd + ' is not a valid stop requirement specification at station ' + name)
+                headway_obj = HeadwayDistribution(headway_avg, headway_sd)
+                TrainStations.append(TrainStation(fixed_delay, num_doors, hrly_board, hrly_alight, board_pace, alight_pace, headway_obj, stop_reqd))
+                if(VERBOSITY > 1):
+                    print 'Read station / stop: ' + name
+        TotalStationDelay = CumulativeDistribution(TrainStations)
+        outfile_path = os.path.join(dir_path, 'StationsStops' + SCENARIO + '_cumulative.csv')
+        with open(outfile_path, 'wb') as outfile:
+            station_writer = csv.writer(outfile, dialect='excel')
+            delay_sec = 0
+            max_delay_sec = TotalStationDelay.max_delay()
+            station_writer.writerow(['CUMULATIVE DELAY DUE TO BOARDING & ALIGHTING (' + SCENARIO + ')'])
+            station_writer.writerow(['Delay, sec', 'Cumulative Station/Stop Delay Probability, ' + SCENARIO])
+            while delay_sec <= max_delay_sec:
+                station_writer.writerow([delay_sec, TotalStationDelay.prob(delay_sec)])
+                delay_sec += 1
+            if(VERBOSITY > 0):
+                print 'Wrote cumulative boarding & alighting delay: ' + outfile_path            
+    except IOError:
+        print 'No transit stations / stops file found: ' + StationsStops_path
+        print 'Excluding boarding & alighting delay from analysis'
+        incl_StationsStops = False
 
-    # Calculate total distribution
-
+    # Calculate total distribution of delay
+    delay_component_dists = []
+    delay_component_str = ''
+    if(incl_TrafficSignals):
+        delay_component_dists.append(TotalTrafficSignalDelay)
+        if(len(delay_component_str) == 0):
+            delay_component_str += 'Traffic signals'
+        else:
+            delay_component_str += '; Traffic signals'
+    if(incl_StopSigns):
+        delay_component_dists.append(TotalStopSignDelay)
+        if(len(delay_component_str) == 0):
+            delay_component_str += 'Stop signs'
+        else:
+            delay_component_str += '; Stop signs'
+    if(incl_PedXings):
+        delay_component_dists.append(TotalPedXingDelay)
+        if(len(delay_component_str) == 0):
+            delay_component_str += 'Pedestrian crossings'
+        else:
+            delay_component_str += '; Pedestrian crossings'
+    if(incl_StationsStops):
+        delay_component_dists.append(TotalStationDelay)
+        if(len(delay_component_str) == 0):
+            delay_component_str += 'Boarding and alighting'
+        else:
+            delay_component_str += '; Boarding and alighting'
+        
+    CumulativeCorridorDelay = CumulativeDistribution(delay_component_dists)
+    outfile_path = os.path.join(dir_path, 'TotalDelay' + SCENARIO + '_cumulative.csv')
+    with open(outfile_path, 'wb') as outfile:
+        cumulative_writer = csv.writer(outfile, dialect='excel')
+        delay_sec = 0
+        max_delay_sec = CumulativeCorridorDelay.max_delay()
+        cumulative_writer.writerow(['CUMULATIVE DELAY ALONG CORRIDOR (' + SCENARIO + ') DUE TO ' + delay_component_str.upper()])
+        cumulative_writer.writerow(['Delay, sec', 'Cumulative Delay Probability, ' + SCENARIO + ' (' + delay_component_str + ')'])
+        while delay_sec <= max_delay_sec:
+            cumulative_writer.writerow([delay_sec, CumulativeCorridorDelay.prob(delay_sec)])
+            delay_sec += 1
+        if(VERBOSITY > 0):
+            print 'Wrote cumulative boarding & alighting delay: ' + outfile_path
+            
     # Finish up
     if(VERBOSITY > 0):
         print 'DELAY DISTRIBUTION CALCULATION - COMPLETED SUCCESSFULLY!'
