@@ -2,12 +2,16 @@
     teo@sfcta.org, 8/26/2013
 """
 
-import math, decimal
+import math, decimal, time
 from decimal import Decimal
 
-VERBOSITY = 0                               # higher values will produce more feedback (0-10)
-decimal.getcontext().prec = 4               # decimal precision
-APPROXIMATE_CERTAINTY = 1-Decimal(0.1)**(decimal.getcontext().prec-2)
+VERBOSITY = 5                               # higher values will produce more feedback (0-10)
+decimal.getcontext().prec = 6               # decimal precision
+MAX_DEVIATIONS = 6                          # in a normal or poisson distribution, maximum deviations from the mean that will be analyzed.
+                                            # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
+                                            # note: in normal: 3 deviations include 0.997 of values; 4 include 0.99994; 5 include 0.9999994; 6 include 0.999999998
+APPROXIMATE_ZERO = Decimal(0.1)**(decimal.getcontext().prec)
+APPROXIMATE_CERTAINTY = 1-APPROXIMATE_ZERO
                                             
 
 USAGE = """
@@ -64,33 +68,47 @@ def assert_decimal(obj):
 
 class HeadwayDistribution:
     """ Duration object for headways
-        Requires mean and standard deviation of headways, in seconds
+        Requires mean and standard deviation of headways, and maximum possible headway, in minutes
         Note: Only calculates distribution of headways up to APPROXIMATE_CERTAINTY
     """
-    def __init__(self, mu, sigma):
+    def __init__(self, mu, sigma, max_headway):
         if(VERBOSITY > 3):
+            print time.ctime()
             print 'creating headway distribution object,'
             print 'average delay: ' + str(mu)
             print 'standard deviation: ' + str(sigma)
         assert_numeric(mu)
         assert_numeric(sigma)
-        self.mean = Decimal(mu)
-        self.variance = Decimal(sigma)**2
+        assert_numeric(max_headway)
+        self.mean = Decimal(60*mu)
+        self.variance = Decimal(60*sigma)**2
         self.probability = []
+        self.max = 60*max_headway
 
         # normal distribution
         headway_sec = 0
         cum_prob = Decimal(0)
-        while(cum_prob < APPROXIMATE_CERTAINTY):
-            this_prob = Decimal( math.exp(-1 * (headway_sec-self.mean ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
+        while(headway_sec <= self.max):
+            this_prob = Decimal( math.exp(-1 * ((headway_sec-self.mean) ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
             self.probability.append(this_prob)
             cum_prob += this_prob
+            if(VERBOSITY > 9):
+                print 'assigned headway distribution: ' + str(headway_sec) + ', probability: ' + str(this_prob)
+                print 'cumulative probability now: ' + str(cum_prob)
+            headway_sec += 1
+
+        # rescale based on cumulative probability
+        scaled_probability = []
+        for prob in self.probability:
+            scaled_probability.append(prob/cum_prob)
+        self.probability = scaled_probability
+
 
     def prob(self, headway_sec):
         try:
             return self.probability[headway_sec]
         except IndexError:
-            return 0
+            return -1
 
     def max_duration(self):
         return -1 + len(self.probability)
@@ -102,6 +120,7 @@ class TrafficSignal:
     """
     def __init__(self, cycle_time, green_time, fixed_delay=Decimal(0)):
         if(VERBOSITY > 3):
+            print time.ctime()
             print 'creating signal object,'
             print 'cycle time: ' + str(cycle_time)
             print 'green time: ' + str(green_time)
@@ -115,7 +134,7 @@ class TrafficSignal:
         self.probability = []
         delay_sec = 0
         cum_prob = Decimal(0)
-        while cum_prob < 1:
+        while delay_sec <= self.cycle:
             if(VERBOSITY > 8):
                 print 'cum_prob=' + str(cum_prob)
                 print 'delay_sec=' + str(delay_sec)
@@ -129,12 +148,18 @@ class TrafficSignal:
                 self.probability.append(1/self.cycle)
                 cum_prob += 1/self.cycle
             delay_sec += 1
+            
+        # rescale based on cumulative probability
+        scaled_probability = []
+        for prob in self.probability:
+            scaled_probability.append(prob/cum_prob)
+        self.probability = scaled_probability
 
     def prob(self, delay_sec):
         try:
             return self.probability[delay_sec]
         except IndexError:
-            return 0
+            return -1
 
     def max_delay(self):
         return -1 + len(self.probability)
@@ -148,8 +173,9 @@ class TrainStation:
         Optional: Stop requirement (defaults to False) - means the train stops even if no passengers board or alight
         Note: probabilities precise only as specified by APPROXIMATE_CERTAINTY
     """
-    def __init__(self, fixed_delay, doors, board_demand, alight_demand, board_pace, alight_pace, headway_obj, required_stop=False, max_delay=86400):
+    def __init__(self, fixed_delay, doors, board_demand, alight_demand, board_pace, alight_pace, headway_obj, required_stop=False):
         if(VERBOSITY > 3):
+            print time.ctime()
             print 'creating train station object,'
             print 'fixed delay: ' + str(fixed_delay)
             print 'board demand: ' + str(board_demand)
@@ -160,7 +186,6 @@ class TrainStation:
         assert_decimal(doors)
         assert_decimal(board_pace)
         assert_decimal(alight_pace)
-        assert_numeric(max_delay)
         self.required = required_stop   # boolean
         self.addl_fixed = fixed_delay
         self.hourly_board = board_demand
@@ -168,24 +193,36 @@ class TrainStation:
         self.train_doors = doors
         self.board_sec = board_pace
         self.alight_sec = alight_pace
-        self.max_cum_delay = Decimal(max_delay)
         self.extract_headway_probs(headway_obj)
         self.calc_pax_distrib()         # calculate distribution of boarding and alighting passenger counts
         self.calculate_delay_probs()
         
     def extract_headway_probs(self, headway_obj):
+        if (VERBOSITY > 5):
+            print time.ctime()
+            print 'extracting headway probabilities'
         headway_sec = 0
+        max_headway = headway_obj.max_duration()
         cum_prob = Decimal(0)
         self.headways = []
-        while(cum_prob < 1 and headway_sec < self.max_cum_delay):
+        while(headway_sec <= max_headway):
             this_prob = Decimal(headway_obj.prob(headway_sec))
             if(this_prob > 0):
                 self.headways.append([headway_sec, this_prob])
                 cum_prob += this_prob
                 if(VERBOSITY > 9):
                     print 'found headway ' + str(headway_sec) + ' with probability ' + str(this_prob)
+                    print 'cumulative headway probability: ' + str(cum_prob)
             headway_sec += 1
+        if(VERBOSITY > 6):
+            print 'extracted headway probabilities; cumulative probability: ' + str(cum_prob)
+        if(cum_prob > 1):
+            raise AssertionError('Coding error: Cumulative headway probabilities exceed 1')
+        if(cum_prob < APPROXIMATE_CERTAINTY):
+            print 'WARNING! Cumulative headway probability is only ' + str(cum_prob)
         self.headways_cum_prob = cum_prob
+        self.max_headway = max_headway
+        self.max_headway_hrs = Decimal(max_headway)/3600
 
     def calc_pax_distrib(self):
         board_pax = 0
@@ -200,9 +237,16 @@ class TrainStation:
         else:
             # poisson process for boarding pax
             cum_prob = Decimal(0)
-            while(cum_prob < APPROXIMATE_CERTAINTY*self.headways_cum_prob):
-                for headway in self.headways:
-                    headway_hrs = Decimal(headway[0])/60
+            if (VERBOSITY > 4):
+                print time.ctime()
+                print 'calculating probability for boarding pax. threshold probability: ' + str(APPROXIMATE_CERTAINTY*self.headways_cum_prob)
+            max_stdev = Decimal(math.sqrt(self.hourly_board*self.max_headway_hrs))
+            while(cum_prob < APPROXIMATE_CERTAINTY and board_pax < max_stdev * MAX_DEVIATIONS):
+                if (VERBOSITY > 8):
+                    print 'calculating probability for ' + str(board_pax) + ' boarding passengers'
+                    print 'cumulative boarding probability: ' + str(cum_prob)
+                for headway in self.headways:   # [headway_sec, this_prob]
+                    headway_hrs = Decimal(headway[0])/3600
                     headway_prob = headway[1]
                     try:
                         this_board_prob = headway_prob * Decimal(math.exp(-1*self.hourly_board*headway_hrs)) * ((self.hourly_board*headway_hrs)**board_pax) / Decimal(math.factorial(board_pax))
@@ -216,7 +260,12 @@ class TrainStation:
                             self.board_pax_prob.append(0)
                     cum_prob += this_board_prob
                 board_pax += 1
-        self.cum_boarding_prob = cum_prob
+            # rescale based on cumulative probability
+            scaled_probability = []
+            for prob in self.board_pax_prob:
+                scaled_probability.append(prob/cum_prob)
+            self.board_pax_prob = scaled_probability
+
         if(VERBOSITY > 5):
             print 'cumulative boarding probability: ' + str(cum_prob)
 
@@ -227,9 +276,16 @@ class TrainStation:
         else:
             # poisson process for alighting pax
             cum_prob = Decimal(0)
-            while(cum_prob < APPROXIMATE_CERTAINTY*self.headways_cum_prob):
-                for headway in self.headways:
-                    headway_hrs = Decimal(headway[0])/60
+            if (VERBOSITY > 4):
+                print time.ctime()
+                print 'calculating probability for alighting pax. threshold probability: ' + str(APPROXIMATE_CERTAINTY*self.headways_cum_prob)
+            max_stdev = Decimal(math.sqrt(self.hourly_alight*self.max_headway_hrs))
+            while(cum_prob < APPROXIMATE_CERTAINTY and alight_pax < max_stdev * MAX_DEVIATIONS):
+                if (VERBOSITY > 8):
+                    print 'calculating probability for ' + str(alight_pax) + ' alighting passengers'
+                    print 'cumulative alighting probability: ' + str(cum_prob)
+                for headway in self.headways:   # [headway_sec, this_prob]
+                    headway_hrs = Decimal(headway[0])/3600
                     headway_prob = headway[1]
                     if(VERBOSITY > 8):
                         print 'calculating alighting probability for:'
@@ -247,7 +303,12 @@ class TrainStation:
                             self.alight_pax_prob.append(0)
                     cum_prob += this_alight_prob
                 alight_pax += 1
-        self.cum_alighting_prob = cum_prob
+            # rescale based on cumulative probability
+            scaled_probability = []
+            for prob in self.alight_pax_prob:
+                scaled_probability.append(prob/cum_prob)
+            self.alight_pax_prob = scaled_probability
+
         if(VERBOSITY > 5):
             print 'cumulative alighting probability: ' + str(cum_prob)
 
@@ -302,7 +363,7 @@ class TrainStation:
         try:
             return self.probability[delay_sec]
         except IndexError:
-            return 0
+            return -1
 
     def max_delay(self):
         return -1 + len(self.probability)
@@ -312,23 +373,25 @@ class TrainStation:
 class CumulativeDistribution:
     """ Calculates the cumulative distribution of delay, given components of delay
         Requires a set of one or more objects which must each have a prob() function
-        that returns the probability of delay, in seconds, as passed to the function
+        that returns the probability of delay, in seconds, as passed to the function,
+        and a max_delay() function which returns the maximum possible delay, in seconds
     """
-    def __init__(self, delay_obj_list, max_delay=86400):
+    def __init__(self, delay_obj_list):
         if(VERBOSITY > 3):
+            print time.ctime()
             print 'creating cumulative distribution object'
+        self.probability = []
         self.partial_probs = []
-        self.max_cum_delay = Decimal(max_delay)
         for trial in range(len(delay_obj_list)):
             delay_obj = delay_obj_list[trial]
+            max_delay = delay_obj.max_delay()
             self.partial_probs.append([])
             delay_sec = 0
             cum_prob = Decimal(0)
-            while cum_prob < 1:
-                if(delay_sec >= self.max_cum_delay):
-                    print 'Coding error! Cumulative delay of ' + str(delay_sec) + ' seconds exceeds maximum.'
-                    return
+            while(delay_sec <= max_delay):
                 this_prob = delay_obj.prob(delay_sec)
+                if(this_prob < 0):
+                    break
                 self.partial_probs[trial].append(this_prob)
                 cum_prob += this_prob
                 delay_sec += 1
@@ -343,9 +406,6 @@ class CumulativeDistribution:
             self.probability = existing_probs
             return
         for delay_sec in range(len(existing_probs)):
-            if(delay_sec >= self.max_cum_delay):
-                print 'Coding error! Cumulative delay of ' + delay_sec + ' seconds exceeds maximum.'
-                return
             for incr_delay in range(len(incr_probs)):
                 this_delay = delay_sec + incr_delay
                 this_prob = existing_probs[delay_sec] * incr_probs[incr_delay]
@@ -361,7 +421,7 @@ class CumulativeDistribution:
         try:
             return self.probability[delay_sec]
         except IndexError:
-            return 0
+            return -1
         
     def max_delay(self):
         return -1 + len(self.probability)
@@ -387,6 +447,14 @@ if __name__ == "__main__":
     StopSigns_path      = os.path.join(dir_path, 'StopSigns' + SCENARIO + '.csv')
     PedXings_path       = os.path.join(dir_path, 'PedXings' + SCENARIO + '.csv')
     StationsStops_path  = os.path.join(dir_path, 'StationsStops' + SCENARIO + '.csv')
+
+    # Initial notification
+    if(VERBOSITY > 6):
+        print 'BEGIN RUN'
+        print time.ctime()
+        print "APPROXIMATE_CERTAINTY: " + str(APPROXIMATE_CERTAINTY)
+        print "APPROXIMATE_ZERO: " + str(APPROXIMATE_ZERO)
+
 
     # Process traffic signal info
     incl_TrafficSignals = True
@@ -451,7 +519,9 @@ if __name__ == "__main__":
                     stop_reqd = False
                 else:
                     raise AssertionError('Data error: ' + stop_reqd + ' is not a valid stop requirement specification at station ' + name)
-                headway_obj = HeadwayDistribution(headway_avg, headway_sd)
+                # only calculate headways up to MAX_DEVIATIONS standard deviations from the mean (beyond is assumed to be negligible)
+                max_calculable_headway = headway_avg + MAX_DEVIATIONS * headway_sd
+                headway_obj = HeadwayDistribution(headway_avg, headway_sd, max_calculable_headway)
                 TrainStations.append(TrainStation(fixed_delay, num_doors, hrly_board, hrly_alight, board_pace, alight_pace, headway_obj, stop_reqd))
                 if(VERBOSITY > 1):
                     print 'Read station / stop: ' + name
