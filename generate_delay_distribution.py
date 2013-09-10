@@ -7,7 +7,7 @@ from decimal import Decimal
 
 VERBOSITY = 5                               # higher values will produce more feedback (0-10)
 decimal.getcontext().prec = 6               # decimal precision
-MAX_DEVIATIONS = 6                          # in a normal or poisson distribution, maximum deviations from the mean that will be analyzed.
+MAX_DEVIATIONS = 5                          # in a normal or poisson distribution, maximum deviations from the mean that will be analyzed.
                                             # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
                                             # note: in normal: 3 deviations include 0.997 of values; 4 include 0.99994; 5 include 0.9999994; 6 include 0.999999998
 APPROXIMATE_ZERO = Decimal(0.1)**(decimal.getcontext().prec)
@@ -179,7 +179,7 @@ class TrainStation:
             print 'creating train station object,'
             print 'fixed delay: ' + str(fixed_delay)
             print 'board demand: ' + str(board_demand)
-            print 'board capacity: ' + str(board_pace) + ' (per door)'
+            print 'board time: ' + str(board_pace) + ' (sec per pax per door)'
         assert_decimal(fixed_delay)
         assert_decimal(board_demand)
         assert_decimal(alight_demand)
@@ -378,8 +378,7 @@ class CumulativeDistribution:
     """
     def __init__(self, delay_obj_list):
         if(VERBOSITY > 3):
-            print time.ctime()
-            print 'creating cumulative distribution object'
+            print time.ctime() + ': creating cumulative distribution object'
         self.probability = []
         self.partial_probs = []
         for trial in range(len(delay_obj_list)):
@@ -470,7 +469,7 @@ if __name__ == "__main__":
                 fixed_time  = Decimal(row[3])
                 TrafficSignals.append(TrafficSignal(cycle_time, green_time, fixed_time))
                 if(VERBOSITY > 1):
-                    print 'Read traffic signal: ' + name
+                    print time.ctime() + ': Read traffic signal: ' + name
         TotalTrafficSignalDelay = CumulativeDistribution(TrafficSignals)
         outfile_path = os.path.join(dir_path, 'TrafficSignals' + SCENARIO + '_cumulative.csv')
         with open(outfile_path, 'wb') as outfile:
@@ -483,7 +482,7 @@ if __name__ == "__main__":
                 signal_writer.writerow([delay_sec, TotalTrafficSignalDelay.prob(delay_sec)])
                 delay_sec += 1
             if(VERBOSITY > 0):
-                print 'Wrote cumulative traffic signal delay: ' + outfile_path
+                print time.ctime() + ': Wrote cumulative traffic signal delay: ' + outfile_path
     except IOError:
         print 'No traffic signal file found: ' + TrafficSignals_path
         print 'Excluding traffic signal delay from analysis'
@@ -520,11 +519,13 @@ if __name__ == "__main__":
                 else:
                     raise AssertionError('Data error: ' + stop_reqd + ' is not a valid stop requirement specification at station ' + name)
                 # only calculate headways up to MAX_DEVIATIONS standard deviations from the mean (beyond is assumed to be negligible)
+                if(VERBOSITY > 1):
+                    print time.ctime() + ': Reading in delay for station / stop: ' + name
                 max_calculable_headway = headway_avg + MAX_DEVIATIONS * headway_sd
                 headway_obj = HeadwayDistribution(headway_avg, headway_sd, max_calculable_headway)
                 TrainStations.append(TrainStation(fixed_delay, num_doors, hrly_board, hrly_alight, board_pace, alight_pace, headway_obj, stop_reqd))
                 if(VERBOSITY > 1):
-                    print 'Read station / stop: ' + name
+                    print time.ctime() + ': Calculated delay for station / stop: ' + name
         TotalStationDelay = CumulativeDistribution(TrainStations)
         outfile_path = os.path.join(dir_path, 'StationsStops' + SCENARIO + '_cumulative.csv')
         with open(outfile_path, 'wb') as outfile:
@@ -537,13 +538,15 @@ if __name__ == "__main__":
                 station_writer.writerow([delay_sec, TotalStationDelay.prob(delay_sec)])
                 delay_sec += 1
             if(VERBOSITY > 0):
-                print 'Wrote cumulative boarding & alighting delay: ' + outfile_path            
+                print time.ctime() + ': Wrote cumulative boarding & alighting delay: ' + outfile_path            
     except IOError:
         print 'No transit stations / stops file found: ' + StationsStops_path
         print 'Excluding boarding & alighting delay from analysis'
         incl_StationsStops = False
 
     # Calculate total distribution of delay
+    if(VERBOSITY > 2):
+        print 'Calculating total cumulative delay distribution.'
     delay_component_dists = []
     delay_component_str = ''
     if(incl_TrafficSignals):
@@ -583,8 +586,8 @@ if __name__ == "__main__":
             cumulative_writer.writerow([delay_sec, CumulativeCorridorDelay.prob(delay_sec)])
             delay_sec += 1
         if(VERBOSITY > 0):
-            print 'Wrote cumulative boarding & alighting delay: ' + outfile_path
+            print time.ctime() + ': Wrote cumulative boarding & alighting delay: ' + outfile_path
             
     # Finish up
     if(VERBOSITY > 0):
-        print 'DELAY DISTRIBUTION CALCULATION - COMPLETED SUCCESSFULLY!'
+        print time.ctime() + ': DELAY DISTRIBUTION CALCULATION - COMPLETED SUCCESSFULLY!'
