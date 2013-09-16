@@ -30,18 +30,39 @@ input file info:
                 * one or more files may be provided
                 * all files should contain a header row, with data beginning
                   on the second row
-                * files are assumed to be formatted as saved by Excel
+                * files are assumed to be formatted in CSV as saved by Excel
 
 input files:
-                TrafficSignals[scenario_name].csv
+                BaseTravelTime_[scenario_name].csv
+                    - columns: Name, Average travel time, Standard deviation
+                    - values in seconds
+                TravelTimeAdjustments_[scenario_name].csv
+                    - columns: delay_sec, probability
+                BinomialDistributions_[scenario_name].csv
+                    - columns: Name, n (number of trials), p (probability of
+                      encounter at each trial), delay per encounter (seconds)
+                TurningVehicles_[scenario_name].csv
+                    - columns: Turning Point Set, Number of Turning Points,
+                      delay_sec (per point), probability (per point)
+                    - Turning Point Set is a string (e.g.: 'A') that refers to
+                      a set of turning points with identical delay distributions
+                      NOTE that all data for a given set must be grouped
+                      consecutively (cannot give data for A, then B, then A)
+                    - Number of Turning Points is the number of turning points
+                      in the set
+                    - delay_sec is a possible delay, in seconds, for turning
+                      points in the present set
+                    - probability is the probibility of delay_sec delay for
+                      turning points in the present set
+                TrafficSignals_[scenario_name].csv
                     - columns: Name, Cycle time, Green time, Fixed delay
                     - values in seconds
-                StopSigns[scenario_name].csv
+                StopSigns_[scenario_name].csv [**NOT YET BUILT OUT**]
                     - columns: Name, Fixed delay, Wait probability, Max wait
                     - values in seconds (except probability)
-                PedXings[scenario_name].csv
+                PedXings_[scenario_name].csv [**NOT YET BUILT OUT**]
                     - columns: Name, Delay probability, Max delay (seconds)
-                StationsStops[scenario_name].csv
+                StationsStops_[scenario_name].csv
                     - columns: Name, Fixed delay (seconds), Number of doors,
                                Hourly boardings, Hourly alightings,
                                Boarding time per passenger per door (seconds),
@@ -64,38 +85,104 @@ def assert_decimal(obj):
             raise AssertionError('Data error: ' + str(obj) + ' is not a number')
         raise AssertionError('Coding error: ' + str(obj) + ' has not been converted to Decimal')
 
-
-
-class HeadwayDistribution:
-    """ Duration object for headways
-        Requires mean and standard deviation of headways, and maximum possible headway, in minutes
-        Note: Only calculates distribution of headways up to APPROXIMATE_CERTAINTY
+class ArbitraryDistribution:
+    """ Duration object for arbitrarily distruted timeframes
+        Requires list of probabilities for each duration, in seconds as follows:
+        increase_prob = [prob_0_sec_increase, prob_1_sec_increase, prob_2_sec_increase, ...]
+        reduction_prob = [prob_0_sec_reduction, prob_1_sec_reduction, prob_2_sec_reduction, ...]
+        probabilities of no increase and no reduction will be added separately
+        NOTE: This distribution can capture negative values of delay (i.e. reductions in delay)
     """
-    def __init__(self, mu, sigma, max_headway):
+    def __init__(self, increase_prob=[], reduction_prob=[]):
         if(VERBOSITY > 3):
             print time.ctime()
-            print 'creating headway distribution object,'
+            print 'creating arbitrary distribution object,'
+            try:
+                print 'probability of no increase in time: ' + str(increase_prob[0])
+                print 'max increase: ' + str(-1 + len(increase_prob))
+            except IndexError:
+                print 'no increases in time'
+            try:
+                print 'probability of no reduction in time: ' + str(reduction_prob[0])
+                print 'max reduction ' + str(-1 + len(reduction_prob))
+            except IndexError:
+                print 'no reductions in time'
+        self.probability_positive = increase_prob
+        self.probability_negative = reduction_prob
+
+        # calculate cumulative probability
+        cum_prob = Decimal(0)
+        for prob in self.probability_positive:
+            assert_numeric(prob)
+            cum_prob += Decimal(prob)
+        for prob in self.probability_negative:
+            assert_numeric(prob)
+            cum_prob += Decimal(prob)
+
+        if(cum_prob == 0):
+            raise AssertionError('Arbitrary distribution object seeded with zero probability.')
+
+        # rescale based on cumulative probability
+        scaled_probability_positive = []
+        scaled_probability_negative = []
+        for prob in self.probability_positive:
+            scaled_probability_positive.append(Decimal(prob)/cum_prob)
+        self.probability_positive = scaled_probability_positive
+        for prob in self.probability_negative:
+            scaled_probability_negative.append(Decimal(prob)/cum_prob)
+        self.probability_negative = scaled_probability_negative
+        
+    def prob(self, time_sec):
+        prob_this_time_sec = Decimal(0)
+        if (time_sec >= 0):
+            try:
+                prob_this_time_sec += self.probability_positive[time_sec]
+            except IndexError:
+                pass
+        if (time_sec <= 0):
+            try:
+                prob_this_time_sec += self.probability_negative[-1*time_sec]
+            except IndexError:
+                pass
+        return prob_this_time_sec
+
+    def max_delay(self):
+        return -1 + len(self.probability_positive)
+
+    def min_delay(self):
+        return -1 * (-1 + len(self.probability_negative))
+        
+
+class NormalDistribution:
+    """ Duration object for normally-distributed headways and travel time
+        Requires mean and standard deviation of time, and maximum possible time, in seconds
+        Note: Only calculates distribution up to APPROXIMATE_CERTAINTY
+    """
+    def __init__(self, mu, sigma, max_time):
+        if(VERBOSITY > 3):
+            print time.ctime()
+            print 'creating normal distribution object,'
             print 'average delay: ' + str(mu)
             print 'standard deviation: ' + str(sigma)
         assert_numeric(mu)
         assert_numeric(sigma)
-        assert_numeric(max_headway)
-        self.mean = Decimal(60*mu)
-        self.variance = Decimal(60*sigma)**2
+        assert_numeric(max_time)
+        self.mean = Decimal(mu)
+        self.variance = Decimal(sigma)**2
         self.probability = []
-        self.max = 60*max_headway
+        self.max = max_time
 
         # normal distribution
-        headway_sec = 0
+        duration_sec = 0
         cum_prob = Decimal(0)
-        while(headway_sec <= self.max):
-            this_prob = Decimal( math.exp(-1 * ((headway_sec-self.mean) ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
+        while(duration_sec <= self.max):
+            this_prob = Decimal( math.exp(-1 * ((duration_sec-self.mean) ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
             self.probability.append(this_prob)
             cum_prob += this_prob
             if(VERBOSITY > 9):
-                print 'assigned headway distribution: ' + str(headway_sec) + ', probability: ' + str(this_prob)
+                print 'assigned normal distribution: ' + str(duration_sec) + ', probability: ' + str(this_prob)
                 print 'cumulative probability now: ' + str(cum_prob)
-            headway_sec += 1
+            duration_sec += 1
 
         # rescale based on cumulative probability
         scaled_probability = []
@@ -104,14 +191,108 @@ class HeadwayDistribution:
         self.probability = scaled_probability
 
 
-    def prob(self, headway_sec):
+    def prob(self, duration_sec):
         try:
-            return self.probability[headway_sec]
+            return self.probability[duration_sec]
         except IndexError:
-            return -1
+            return 0
 
-    def max_duration(self):
+    def max_delay(self):
         return -1 + len(self.probability)
+
+    def min_delay(self):
+        return 0
+
+class BinomialDistribution:
+    """ Duration object for binomially-distributed delays
+        Requires number of trials (n), probability of encounter (p),
+        delay per encounter (fixed, seconds)
+    """
+    def __init__(self, binomial_n, binomial_p, delay_per_encounter):
+        if(VERBOSITY > 3):
+            print time.ctime() + ': creating binomial distribution, n=' + str(binomial_n)
+        assert_numeric(binomial_n)
+        assert_numeric(binomial_p)
+        assert_numeric(delay_per_encounter)
+        self.n = int(binomial_n)
+        self.p = Decimal(binomial_p)
+        self.delay_sec = int(delay_per_encounter)
+
+        # binomial distribution
+        self.probability = []   # probability of delay (sec)
+        self.probability_encounters = []    # probability of k encounters
+        k = 0   # number of encounters (successes)
+        while(k <= self.n):
+            nck = Decimal(math.factorial(self.n))/(math.factorial(k)*math.factorial(self.n - k)) # nCk, combinations of size k from n elements
+            binomial_pmf = nck * (self.p ** k) * ((1 - self.p) ** (self.n - k))
+            self.probability_encounters.append(binomial_pmf)
+            while(len(self.probability) <= k * self.delay_sec):
+                self.probability.append(0)
+            self.probability[k * self.delay_sec] = binomial_pmf
+            k += 1
+
+    def prob(self, duration_sec):
+        try:
+            return self.probability[duration_sec]
+        except IndexError:
+            return 0
+
+    def prob_count(self, num_instances):
+        try:
+            return self.probability_encounters[num_instances]
+        except IndexError:
+            return 0
+        
+    def max_delay(self):
+        return -1 + len(self.probability)
+
+    def min_delay(self):
+        return 0
+
+
+class MultinomialDistribution:
+    """ Duration object for multinomially-distributed delays
+        Requires number of trials (n), delay per trial (probability distribution)
+    """
+    def __init__(self, multinomial_n, delay_per_trial):
+        if(VERBOSITY > 3):
+            print time.ctime() + ': creating multinomial distribution, n=' + str(multinomial_n)
+        assert_numeric(multinomial_n)
+        self.n = int(multinomial_n)
+        self.categorical_dist = delay_per_trial
+
+        # multinomial distribution
+        self.trials = []
+        for k in range(multinomial_n):
+            self.trials.append(self.categorical_dist)
+        self.distribution = CumulativeDistribution(self.trials)
+
+        # extract probabilities
+        self.probability = []
+        delay_sec = 0
+        max_delay = self.distribution.max_delay()
+        while(delay_sec <= max_delay):
+            self.probability.append(self.distribution.prob(delay_sec))
+            delay_sec += 1
+        
+
+    def prob(self, duration_sec):
+        try:
+            return self.probability[duration_sec]
+        except IndexError:
+            return 0
+
+    def prob_count(self, num_instances):
+        try:
+            return self.probability_encounters[num_instances]
+        except IndexError:
+            return 0
+        
+    def max_delay(self):
+        return -1 + len(self.probability)
+
+    def min_delay(self):
+        return 0
 
 
 class TrafficSignal:
@@ -159,10 +340,13 @@ class TrafficSignal:
         try:
             return self.probability[delay_sec]
         except IndexError:
-            return -1
+            return 0
 
     def max_delay(self):
         return -1 + len(self.probability)
+    
+    def min_delay(self):
+        return 0
 
 
 class TrainStation:
@@ -202,7 +386,7 @@ class TrainStation:
             print time.ctime()
             print 'extracting headway probabilities'
         headway_sec = 0
-        max_headway = headway_obj.max_duration()
+        max_headway = headway_obj.max_delay()
         cum_prob = Decimal(0)
         self.headways = []
         while(headway_sec <= max_headway):
@@ -363,10 +547,13 @@ class TrainStation:
         try:
             return self.probability[delay_sec]
         except IndexError:
-            return -1
+            return 0
 
     def max_delay(self):
         return -1 + len(self.probability)
+    
+    def min_delay(self):
+        return 0
 
 
 
@@ -374,7 +561,9 @@ class CumulativeDistribution:
     """ Calculates the cumulative distribution of delay, given components of delay
         Requires a set of one or more objects which must each have a prob() function
         that returns the probability of delay, in seconds, as passed to the function,
-        and a max_delay() function which returns the maximum possible delay, in seconds
+        a max_delay() function which returns the maximum possible delay, in seconds,
+        and a min_delay() function which returns the minimum possible delay (0 or
+        negative), in seconds
     """
     def __init__(self, delay_obj_list):
         if(VERBOSITY > 3):
@@ -384,14 +573,22 @@ class CumulativeDistribution:
         for trial in range(len(delay_obj_list)):
             delay_obj = delay_obj_list[trial]
             max_delay = delay_obj.max_delay()
-            self.partial_probs.append([])
-            delay_sec = 0
+            self.partial_probs.append([[],[]]) # list for positive and negative delay lists for this trial
+            delay_sec = delay_obj.min_delay()
             cum_prob = Decimal(0)
             while(delay_sec <= max_delay):
                 this_prob = delay_obj.prob(delay_sec)
                 if(this_prob < 0):
-                    break
-                self.partial_probs[trial].append(this_prob)
+                    raise AssertionError('Probability is negative: ' + str(this_prob))
+                if(delay_sec >= 0):
+                    self.partial_probs[trial][0].append(this_prob)
+                else:
+                    try:
+                        self.partial_probs[trial][1][-1*delay_sec] = this_prob
+                    except IndexError:
+                        while(len(self.partial_probs[trial][1]) <= -1*delay_sec):
+                            self.partial_probs[trial][1].append(0)
+                        self.partial_probs[trial][1][-1*delay_sec] = this_prob                        
                 cum_prob += this_prob
                 delay_sec += 1
         self.num_partials = len(self.partial_probs)
@@ -400,11 +597,15 @@ class CumulativeDistribution:
     def calc_cum_probs(self, existing_probs=[1]):
         new_probs = []
         try:
-            incr_probs = self.partial_probs.pop(0)
+            addl_probs = self.partial_probs.pop(0)
+            incr_probs = addl_probs[0]
+            decr_probs = addl_probs[1]
         except IndexError:
             self.probability = existing_probs
             return
+        # permute by each second of delay in existing distribution
         for delay_sec in range(len(existing_probs)):
+            # probabilistically apply incremental delay from additional probabilities
             for incr_delay in range(len(incr_probs)):
                 this_delay = delay_sec + incr_delay
                 this_prob = existing_probs[delay_sec] * incr_probs[incr_delay]
@@ -414,16 +615,29 @@ class CumulativeDistribution:
                         break
                     except IndexError:
                         new_probs.append(0)
+            # probabilistically apply delay reduction from additional probabilities
+            for decr_delay in range(len(decr_probs)):
+                this_delay = max(0, delay_sec - decr_delay)
+                this_prob = existing_probs[delay_sec] * decr_probs[decr_delay]
+                while(True):
+                    try:
+                        new_probs[this_delay] += this_prob
+                        break
+                    except IndexError:
+                        new_probs.append(0) 
         self.calc_cum_probs(new_probs)
         
     def prob(self, delay_sec):
         try:
             return self.probability[delay_sec]
         except IndexError:
-            return -1
+            return 0
         
     def max_delay(self):
         return -1 + len(self.probability)
+
+    def min_delay(self):
+        return 0
 
 
 
@@ -442,10 +656,14 @@ if __name__ == "__main__":
         SPEC_DIR    = args[0]
         
     dir_path = os.path.abspath(SPEC_DIR)
-    TrafficSignals_path = os.path.join(dir_path, 'TrafficSignals' + SCENARIO + '.csv')
-    StopSigns_path      = os.path.join(dir_path, 'StopSigns' + SCENARIO + '.csv')
-    PedXings_path       = os.path.join(dir_path, 'PedXings' + SCENARIO + '.csv')
-    StationsStops_path  = os.path.join(dir_path, 'StationsStops' + SCENARIO + '.csv')
+    BaseTT_Path         = os.path.join(dir_path, 'BaseTravelTime_' + SCENARIO + '.csv')
+    TTAdjust_Path       = os.path.join(dir_path, 'TravelTimeAdjustments_' + SCENARIO + '.csv')
+    BinomialDist_Path   = os.path.join(dir_path, 'BinomialDistributions_' + SCENARIO + '.csv')
+    TurningVehs_Path    = os.path.join(dir_path, 'TurningVehicles_' + SCENARIO + '.csv')
+    TrafficSignals_path = os.path.join(dir_path, 'TrafficSignals_' + SCENARIO + '.csv')
+    StopSigns_path      = os.path.join(dir_path, 'StopSigns_' + SCENARIO + '.csv')
+    PedXings_path       = os.path.join(dir_path, 'PedXings_' + SCENARIO + '.csv')
+    StationsStops_path  = os.path.join(dir_path, 'StationsStops_' + SCENARIO + '.csv')
 
     # Initial notification
     if(VERBOSITY > 6):
@@ -453,6 +671,177 @@ if __name__ == "__main__":
         print time.ctime()
         print "APPROXIMATE_CERTAINTY: " + str(APPROXIMATE_CERTAINTY)
         print "APPROXIMATE_ZERO: " + str(APPROXIMATE_ZERO)
+
+    # Process base travel time info
+    incl_BaseTT = True
+    try:
+        with open(BaseTT_Path, 'rb') as BaseTT_csv:
+            BaseSegments = []
+            tt_reader = csv.reader(BaseTT_csv, dialect='excel')
+            header = tt_reader.next() # throw away the header as it doesn't contain data
+            for row in tt_reader:
+                name        = str(row[0])
+                avg_time    = Decimal(row[1])
+                stdev_time  = Decimal(row[2])
+                max_calculable_tt = avg_time + MAX_DEVIATIONS * stdev_time
+                BaseSegments.append(NormalDistribution(avg_time, stdev_time, max_calculable_tt))
+                if(VERBOSITY > 1):
+                    print time.ctime() + ': Read base travel time: ' + name
+        TotalBaseTT = CumulativeDistribution(BaseSegments)
+        outfile_path = os.path.join(dir_path, 'BaseTravelTime_' + SCENARIO + '_cumulative.csv')
+        with open(outfile_path, 'wb') as outfile:
+            tt_writer = csv.writer(outfile, dialect='excel')
+            delay_sec = 0
+            max_delay_sec = TotalBaseTT.max_delay()
+            tt_writer.writerow(['CUMULATIVE BASE TRAVEL TIME (' + SCENARIO + ')'])
+            tt_writer.writerow(['Delay, sec', 'Cumulative Base Travel Time Probability, ' + SCENARIO])
+            while delay_sec <= max_delay_sec:
+                tt_writer.writerow([delay_sec, TotalBaseTT.prob(delay_sec)])
+                delay_sec += 1
+            if(VERBOSITY > 0):
+                print time.ctime() + ': Wrote cumulative base travel time: ' + outfile_path            
+    except IOError:
+        print 'No base travel time file found: ' + BaseTT_Path
+        print 'Excluding base travel time and base variation from analysis'
+        incl_BaseTT = False
+        
+    # Process travel time adjustments
+    incl_TTAdjust = True
+    try:
+        with open(TTAdjust_Path, 'rb') as TTAdjust_csv:
+            ProbabilityListIncreasedDelay = []
+            ProbabilityListReducedDelay = []
+            ttadjust_reader = csv.reader(TTAdjust_csv, dialect='excel')
+            header = ttadjust_reader.next() # throw away the header as it doesn't contain data
+            for row in ttadjust_reader:
+                delay_sec   = int(row[0])
+                probability = Decimal(row[1])
+                if(delay_sec >= 0):
+                    try:
+                        ProbabilityListIncreasedDelay.append(Decimal(0))
+                        ProbabilityListIncreasedDelay[delay_sec] = probability
+                    except IndexError:
+                        while len(ProbabilityListIncreasedDelay <= delay_sec):
+                            ProbabilityListIncreasedDelay.append(Decimal(0))
+                        ProbabilityListIncreasedDelay[delay_sec] = probability
+                else:
+                    try:
+                        ProbabilityListReducedDelay.append(Decimal(0))
+                        ProbabilityListReducedDelay[-1*delay_sec] = probability
+                    except IndexError:
+                        while(len(ProbabilityListReducedDelay) <= -1*delay_sec):
+                            ProbabilityListReducedDelay.append(Decimal(0))
+                        ProbabilityListReducedDelay[-1*delay_sec] = probability                    
+                if(VERBOSITY > 7):
+                    print time.ctime() + ': Will adjust travel time by ' + str(delay_sec) + ' with probability ' + str(probability)
+        TTAdjustment = ArbitraryDistribution(ProbabilityListIncreasedDelay,ProbabilityListReducedDelay)
+        if(VERBOSITY > 0):
+            print time.ctime() + ': Calculated travel time adjustments from: ' + TTAdjust_Path            
+    except IOError:
+        print 'No travel time adustment file found: ' + TTAdjust_Path
+        print 'Excluding any adjustments from analysis'
+        incl_TTAdjust = False
+
+    # Process binomial distribution data
+    incl_BinDists = True
+    try:
+        with open(BinomialDist_Path, 'rb') as BinDists_csv:
+            BinomialDistributions = []
+            BinDists_reader = csv.reader(BinDists_csv, dialect='excel')
+            header = BinDists_reader.next() # throw away the header as it doesn't contain data
+            for row in BinDists_reader:
+                name        = str(row[0])
+                n           = int(row[1])
+                p           = Decimal(row[2])
+                delay_sec   = int(row[3])
+                BinomialDistributions.append(BinomialDistribution(n, p, delay_sec))
+                if(VERBOSITY > 1):
+                    print time.ctime() + ': Read binomial distribution: ' + name
+        TotalBinomiallyDistributedDelay = CumulativeDistribution(BinomialDistributions)
+        outfile_path = os.path.join(dir_path, 'BinomialDistributions_' + SCENARIO + '_cumulative.csv')
+        with open(outfile_path, 'wb') as outfile:
+            BinDists_writer = csv.writer(outfile, dialect='excel')
+            delay_sec = 0
+            max_delay_sec = TotalBinomiallyDistributedDelay.max_delay()
+            BinDists_writer.writerow(['CUMULATIVE DELAY DUE TO BINOMIALLY-DISTRIBUTED FACTORS (' + SCENARIO + ')'])
+            BinDists_writer.writerow(['Delay, sec', 'Cumulative Binomially-Distributed Delay Probability, ' + SCENARIO])
+            while delay_sec <= max_delay_sec:
+                BinDists_writer.writerow([delay_sec, TotalBinomiallyDistributedDelay.prob(delay_sec)])
+                delay_sec += 1
+            if(VERBOSITY > 0):
+                print time.ctime() + ': Wrote cumulative binomially-distributed delay: ' + outfile_path
+    except IOError:
+        print 'No binomial delay file found: ' + BinomialDist_Path
+        print 'Excluding any binomially-distrubted delays from analysis'
+        incl_BinDists = False
+
+    # Process turning vehicles info
+    incl_TurningVehs = True
+    try:
+        with open(TurningVehs_Path, 'rb') as TurningVehs_csv:
+            if(VERBOSITY > 1):
+                print time.ctime() + ': reading in turning vehicle info'
+            DelayProbabilityList = []
+            TurningPointSets = []
+            latest_set = ''
+            latest_num_pts = -1
+            tv_reader = csv.reader(TurningVehs_csv, dialect='excel')
+            header = tv_reader.next() # throw away the header as it doesn't contain data
+            for row in tv_reader:
+                name        = str(row[0])
+                num_points  = int(row[1])
+                delay_sec   = int(row[2])
+                probability = Decimal(row[2])
+                if(name == latest_set or latest_num_pts == -1):
+                    if(latest_num_pts <> num_points and name == latest_set):
+                        raise AssertionError('Error! Mismatched number of turning points (' + str(num_points) + ') for turning set ' + str(name) + ' (expected: ' + str(latest_set) + ')')
+                    latest_set = name
+                    latest_num_pts = num_points
+                    try:
+                        DelayProbabilityList.append(Decimal(0))
+                        DelayProbabilityList[delay_sec] = probability
+                    except IndexError:
+                        while len(DelayProbabilityList <= delay_sec):
+                            DelayProbabilityList.append(Decimal(0))
+                        DelayProbabilityList[delay_sec] = probability
+                else:
+                    categorical_distribution = ArbitraryDistribution(DelayProbabilityList)
+                    TurningPointSets.append(MultinomialDistribution(latest_num_pts, categorical_distribution))
+                    if(VERBOSITY > 1):
+                        print time.ctime() + ': Read turning point set: ' + latest_set
+                    DelayProbabilityList = []
+                    latest_set = name
+                    latest_num_pts = num_points
+                    try:
+                        DelayProbabilityList.append(Decimal(0))
+                        DelayProbabilityList[delay_sec] = probability
+                    except IndexError:
+                        while len(DelayProbabilityList <= delay_sec):
+                            DelayProbabilityList.append(Decimal(0))
+                        DelayProbabilityList[delay_sec] = probability  
+            categorical_distribution = ArbitraryDistribution(DelayProbabilityList)
+            TurningPointSets.append(MultinomialDistribution(latest_num_pts, categorical_distribution))
+            if(VERBOSITY > 1):
+                print time.ctime() + ': Read turning point set: ' + latest_set                      
+        TotalTurningVehicleDelay = CumulativeDistribution(TurningPointSets)
+        if(VERBOSITY > 0):
+            print time.ctime() + ': Calculated turning vehicle delays from: ' + TurningVehs_Path            
+        outfile_path = os.path.join(dir_path, 'TurningVehicles_' + SCENARIO + '_cumulative.csv')
+        with open(outfile_path, 'wb') as outfile:
+            tv_writer = csv.writer(outfile, dialect='excel')
+            delay_sec = 0
+            max_delay_sec = TotalTurningVehicleDelay.max_delay()
+            tv_writer.writerow(['CUMULATIVE DELAY DUE TO TURNING VEHICLES (' + SCENARIO + ')'])
+            tv_writer.writerow(['Delay, sec', 'Cumulative Turning Vehicle Delay Probability, ' + SCENARIO])
+            while delay_sec <= max_delay_sec:
+                tv_writer.writerow([delay_sec, TotalTurningVehicleDelay.prob(delay_sec)])
+                delay_sec += 1
+            if(VERBOSITY > 0):
+                print time.ctime() + ': Wrote cumulative turning vehicle delay: ' + outfile_path
+    except IOError:
+        print 'No turning vehicles file found: ' + TurningVehs_Path
+        print 'Excluding turning vehicle delay from analysis'
+        incl_TurningVehs = False
 
 
     # Process traffic signal info
@@ -463,7 +852,7 @@ if __name__ == "__main__":
             signal_reader = csv.reader(TrafficSignals_csv, dialect='excel')
             header = signal_reader.next() # throw away the header as it doesn't contain data
             for row in signal_reader:
-                name        = row[0]
+                name        = str(row[0])
                 cycle_time  = Decimal(row[1])
                 green_time  = Decimal(row[2])
                 fixed_time  = Decimal(row[3])
@@ -471,7 +860,7 @@ if __name__ == "__main__":
                 if(VERBOSITY > 1):
                     print time.ctime() + ': Read traffic signal: ' + name
         TotalTrafficSignalDelay = CumulativeDistribution(TrafficSignals)
-        outfile_path = os.path.join(dir_path, 'TrafficSignals' + SCENARIO + '_cumulative.csv')
+        outfile_path = os.path.join(dir_path, 'TrafficSignals_' + SCENARIO + '_cumulative.csv')
         with open(outfile_path, 'wb') as outfile:
             signal_writer = csv.writer(outfile, dialect='excel')
             delay_sec = 0
@@ -502,7 +891,7 @@ if __name__ == "__main__":
             stations_reader = csv.reader(StationsStops_csv, dialect='excel')
             header = stations_reader.next() # throw away the header as it doesn't contain data
             for row in stations_reader:
-                name        = row[0]
+                name        = str(row[0])
                 fixed_delay = Decimal(row[1])
                 num_doors   = Decimal(row[2])
                 hrly_board  = Decimal(row[3])
@@ -511,7 +900,7 @@ if __name__ == "__main__":
                 alight_pace = Decimal(row[6])
                 headway_avg = Decimal(row[7])
                 headway_sd  = Decimal(row[8])
-                stop_reqd   = row[9]
+                stop_reqd   = str(row[9])
                 if(stop_reqd.upper() in ('1','TRUE','YES')):
                     stop_reqd = True
                 elif(stop_reqd.upper() in ('0','FALSE','NO')):
@@ -522,12 +911,12 @@ if __name__ == "__main__":
                 if(VERBOSITY > 1):
                     print time.ctime() + ': Reading in delay for station / stop: ' + name
                 max_calculable_headway = headway_avg + MAX_DEVIATIONS * headway_sd
-                headway_obj = HeadwayDistribution(headway_avg, headway_sd, max_calculable_headway)
+                headway_obj = NormalDistribution(60*headway_avg, 60*headway_sd, 60*max_calculable_headway)
                 TrainStations.append(TrainStation(fixed_delay, num_doors, hrly_board, hrly_alight, board_pace, alight_pace, headway_obj, stop_reqd))
                 if(VERBOSITY > 1):
                     print time.ctime() + ': Calculated delay for station / stop: ' + name
         TotalStationDelay = CumulativeDistribution(TrainStations)
-        outfile_path = os.path.join(dir_path, 'StationsStops' + SCENARIO + '_cumulative.csv')
+        outfile_path = os.path.join(dir_path, 'StationsStops_' + SCENARIO + '_cumulative.csv')
         with open(outfile_path, 'wb') as outfile:
             station_writer = csv.writer(outfile, dialect='excel')
             delay_sec = 0
@@ -549,33 +938,49 @@ if __name__ == "__main__":
         print 'Calculating total cumulative delay distribution.'
     delay_component_dists = []
     delay_component_str = ''
+    if(incl_BaseTT):
+        delay_component_dists.append(TotalBaseTT)
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Base travel time'
+    if(incl_TTAdjust):
+        delay_component_dists.append(TTAdjustment)
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Travel time adjustments'
+    if(incl_BinDists):
+        delay_component_dists.append(TotalBinomiallyDistributedDelay)
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Binomially-distributed delays'
+    if(incl_TurningVehs):
+        delay_component_dists.append(TotalTurningVehicleDelay)
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Turning vehicles'
     if(incl_TrafficSignals):
         delay_component_dists.append(TotalTrafficSignalDelay)
-        if(len(delay_component_str) == 0):
-            delay_component_str += 'Traffic signals'
-        else:
-            delay_component_str += '; Traffic signals'
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Traffic signals'
     if(incl_StopSigns):
         delay_component_dists.append(TotalStopSignDelay)
-        if(len(delay_component_str) == 0):
-            delay_component_str += 'Stop signs'
-        else:
-            delay_component_str += '; Stop signs'
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Stop signs'
     if(incl_PedXings):
         delay_component_dists.append(TotalPedXingDelay)
-        if(len(delay_component_str) == 0):
-            delay_component_str += 'Pedestrian crossings'
-        else:
-            delay_component_str += '; Pedestrian crossings'
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Pedestrian crossings'
     if(incl_StationsStops):
         delay_component_dists.append(TotalStationDelay)
-        if(len(delay_component_str) == 0):
-            delay_component_str += 'Boarding and alighting'
-        else:
-            delay_component_str += '; Boarding and alighting'
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Boarding and alighting'
         
     CumulativeCorridorDelay = CumulativeDistribution(delay_component_dists)
-    outfile_path = os.path.join(dir_path, 'TotalDelay' + SCENARIO + '_cumulative.csv')
+    outfile_path = os.path.join(dir_path, 'TotalDelay_' + SCENARIO + '_cumulative.csv')
     with open(outfile_path, 'wb') as outfile:
         cumulative_writer = csv.writer(outfile, dialect='excel')
         delay_sec = 0
