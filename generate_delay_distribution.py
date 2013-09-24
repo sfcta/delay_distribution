@@ -7,7 +7,7 @@ from decimal import Decimal
 
 VERBOSITY = 5                               # higher values will produce more feedback (0-10)
 decimal.getcontext().prec = 6               # decimal precision
-MAX_DEVIATIONS = 5                          # in a normal or poisson distribution, maximum deviations from the mean that will be analyzed.
+MAX_DEVIATIONS = 5                          # in a normal or lognormal distribution, maximum deviations from the mean that will be analyzed.
                                             # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
                                             # note: in normal: 3 deviations include 0.997 of values; 4 include 0.99994; 5 include 0.9999994; 6 include 0.999999998
 APPROXIMATE_ZERO = Decimal(0.1)**(decimal.getcontext().prec)
@@ -156,9 +156,9 @@ class ArbitraryDistribution:
 class NormalDistribution:
     """ Duration object for normally-distributed headways and travel time
         Requires mean and standard deviation of time, and maximum possible time, in seconds
-        Note: Only calculates distribution up to APPROXIMATE_CERTAINTY
+        OPTIONAL: probability of delay or that distribution does apply (assumed to be 1 if not provided)
     """
-    def __init__(self, mu, sigma, max_time):
+    def __init__(self, mu, sigma, max_time, prob_appl=1):
         if(VERBOSITY > 3):
             print time.ctime()
             print 'creating normal distribution object,'
@@ -167,16 +167,26 @@ class NormalDistribution:
         assert_numeric(mu)
         assert_numeric(sigma)
         assert_numeric(max_time)
+        assert_numberic(prob_appl)
         self.mean = Decimal(mu)
         self.variance = Decimal(sigma)**2
         self.probability = []
         self.max = max_time
+        self.prob_appl = Decimal(prob_appl)
+        self.prob_notappl = 1 - self.prob_appl
+        if(self.prob_notappl > 1 or self.prob_notappl < 0):
+            raise AssertionError('ERROR: Normal distribution called with probability of applicability of ' + str(self.prob_appl))
 
         # normal distribution
         duration_sec = 0
         cum_prob = Decimal(0)
         while(duration_sec <= self.max):
             this_prob = Decimal( math.exp(-1 * ((duration_sec-self.mean) ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
+            # scale to probability of the distribution applying
+            this_prob *= self.prob_appl
+            # if zero duration, add in probability of non-applicability
+            if(duration_sec == 0):
+                this_prob += self.prob_notappl
             self.probability.append(this_prob)
             cum_prob += this_prob
             if(VERBOSITY > 9):
@@ -202,6 +212,66 @@ class NormalDistribution:
 
     def min_delay(self):
         return 0
+
+
+
+class LognormalDistribution:
+    """ Duration object for lognormally-distributed timeframes
+        Requires mean and standard deviation of time, and maximum possible time, in seconds.
+        OPTIONAL: probability of delay or that distribution does apply (assumed to be 1 if not provided)
+    """
+    def __init__(self, mean, stdev, max_time, prob_appl=1):
+        if(VERBOSITY > 3):
+            print time.ctime() + ": creating lognormal distribution"
+            print time.ctime() + ": mean=" + str(mean) + ", stdev=" + str(stdev)
+        assert_numeric(mean)
+        assert_numeric(stdev)
+        assert_numeric(max_time)
+        assert_numeric(prob_appl)
+        self.mean = Decimal(mean)
+        self.sd = Decimal(stdev)
+        self.mu = Decimal(math.log(self.mean**2 / Decimal(math.sqrt(self.sd**2 + self.mean**2))))
+        self.sigma = Decimal(math.sqrt(Decimal(math.log(1 + (self.sd**2)/(self.mean**2)))))
+        self.max = max_time
+        self.prob_appl = Decimal(prob_appl)
+        self.prob_notappl = 1 - self.prob_appl
+        if(self.prob_notappl > 1 or self.prob_notappl < 0):
+            raise AssertionError('ERROR: Lognormal distribution called with probability of applicability of ' + str(self.prob_appl))
+        self.probability = [self.prob_notappl] # impossible to have 0 duration with lognormal distribution unless there is no delay
+    
+        # lognormal distribution
+        duration_sec = 1
+        cum_prob = self.prob_notappl
+        while(duration_sec <= self.max):
+            this_prob = 1/(duration_sec * Decimal(math.sqrt(2 * math.pi)) * self.sigma) * Decimal(math.exp(-1 * (Decimal(math.log(duration_sec))-self.mu)**2 / (2 * self.sigma**2)))
+            # scale to probability of the distribution applying
+            this_prob *= self.prob_appl
+            self.probability.append(this_prob)
+            cum_prob += this_prob
+            if(VERBOSITY > 9):
+                print 'assigned lognormal distribution: ' + str(duration_sec) + ', probability: ' + str(this_prob)
+                print 'cumulative probability now: ' + str(cum_prob)
+            duration_sec += 1
+
+        # rescale based on cumulative probability
+        scaled_probability = []
+        for prob in self.probability:
+            scaled_probability.append(prob/cum_prob)
+        self.probability = scaled_probability
+
+
+    def prob(self, duration_sec):
+        try:
+            return self.probability[duration_sec]
+        except IndexError:
+            return 0
+
+    def max_delay(self):
+        return -1 + len(self.probability)
+
+    def min_delay(self):
+        return 0            
+        
 
 class BinomialDistribution:
     """ Duration object for binomially-distributed delays
@@ -260,6 +330,7 @@ class MultinomialDistribution:
         assert_numeric(multinomial_n)
         self.n = int(multinomial_n)
         self.categorical_dist = delay_per_trial
+        self.prob_encounter = 1-Decimal(prob_encounter)
 
         # multinomial distribution
         self.trials = []
@@ -656,10 +727,11 @@ if __name__ == "__main__":
         SPEC_DIR    = args[0]
         
     dir_path = os.path.abspath(SPEC_DIR)
-    BaseTT_Path         = os.path.join(dir_path, 'BaseTravelTime_' + SCENARIO + '.csv')
-    TTAdjust_Path       = os.path.join(dir_path, 'TravelTimeAdjustments_' + SCENARIO + '.csv')
-    BinomialDist_Path   = os.path.join(dir_path, 'BinomialDistributions_' + SCENARIO + '.csv')
-    TurningVehs_Path    = os.path.join(dir_path, 'TurningVehicles_' + SCENARIO + '.csv')
+    BaseTT_path         = os.path.join(dir_path, 'BaseTravelTime_' + SCENARIO + '.csv')
+    TTAdjust_path       = os.path.join(dir_path, 'TravelTimeAdjustments_' + SCENARIO + '.csv')
+    BinomialDist_path   = os.path.join(dir_path, 'BinomialDistributions_' + SCENARIO + '.csv')
+    MNDist_path         = os.path.join(dir_path, 'MultinomialDistributions_' + SCENARIO + '.csv')
+    TurningVehs_path    = os.path.join(dir_path, 'TurningVehicles_' + SCENARIO + '.csv')
     TrafficSignals_path = os.path.join(dir_path, 'TrafficSignals_' + SCENARIO + '.csv')
     StopSigns_path      = os.path.join(dir_path, 'StopSigns_' + SCENARIO + '.csv')
     PedXings_path       = os.path.join(dir_path, 'PedXings_' + SCENARIO + '.csv')
@@ -675,7 +747,7 @@ if __name__ == "__main__":
     # Process base travel time info
     incl_BaseTT = True
     try:
-        with open(BaseTT_Path, 'rb') as BaseTT_csv:
+        with open(BaseTT_path, 'rb') as BaseTT_csv:
             BaseSegments = []
             tt_reader = csv.reader(BaseTT_csv, dialect='excel')
             header = tt_reader.next() # throw away the header as it doesn't contain data
@@ -701,14 +773,14 @@ if __name__ == "__main__":
             if(VERBOSITY > 0):
                 print time.ctime() + ': Wrote cumulative base travel time: ' + outfile_path            
     except IOError:
-        print 'No base travel time file found: ' + BaseTT_Path
+        print 'No base travel time file found: ' + BaseTT_path
         print 'Excluding base travel time and base variation from analysis'
         incl_BaseTT = False
         
     # Process travel time adjustments
     incl_TTAdjust = True
     try:
-        with open(TTAdjust_Path, 'rb') as TTAdjust_csv:
+        with open(TTAdjust_path, 'rb') as TTAdjust_csv:
             ProbabilityListIncreasedDelay = []
             ProbabilityListReducedDelay = []
             ttadjust_reader = csv.reader(TTAdjust_csv, dialect='excel')
@@ -736,16 +808,16 @@ if __name__ == "__main__":
                     print time.ctime() + ': Will adjust travel time by ' + str(delay_sec) + ' with probability ' + str(probability)
         TTAdjustment = ArbitraryDistribution(ProbabilityListIncreasedDelay,ProbabilityListReducedDelay)
         if(VERBOSITY > 0):
-            print time.ctime() + ': Calculated travel time adjustments from: ' + TTAdjust_Path            
+            print time.ctime() + ': Calculated travel time adjustments from: ' + TTAdjust_path            
     except IOError:
-        print 'No travel time adustment file found: ' + TTAdjust_Path
+        print 'No travel time adustment file found: ' + TTAdjust_path
         print 'Excluding any adjustments from analysis'
         incl_TTAdjust = False
 
     # Process binomial distribution data
     incl_BinDists = True
     try:
-        with open(BinomialDist_Path, 'rb') as BinDists_csv:
+        with open(BinomialDist_path, 'rb') as BinDists_csv:
             BinomialDistributions = []
             BinDists_reader = csv.reader(BinDists_csv, dialect='excel')
             header = BinDists_reader.next() # throw away the header as it doesn't contain data
@@ -771,14 +843,57 @@ if __name__ == "__main__":
             if(VERBOSITY > 0):
                 print time.ctime() + ': Wrote cumulative binomially-distributed delay: ' + outfile_path
     except IOError:
-        print 'No binomial delay file found: ' + BinomialDist_Path
+        print 'No binomial delay file found: ' + BinomialDist_path
         print 'Excluding any binomially-distrubted delays from analysis'
         incl_BinDists = False
+
+
+    # Process multinomial distribution data
+    incl_MNDists = True
+    try:
+        with open(MNDist_path, 'rb') as MNDists_csv:
+            MultinomialDistributions = []
+            MNDists_reader = csv.reader(MNDists_csv, dialect='excel')
+            header = MNDists_reader.next() # throw away the header as it doesn't contain data
+            for row in MNDists_reader:
+                name            = str(row[0])
+                num_trials      = int(row[1])
+                prob_encounter  = Decimal(row[2])
+                mean            = Decimal(row[3])
+                stdev           = Decimal(row[4])
+                dist_type       = str(row[5]).upper()
+                max_delay_per_encounter = mean + MAX_DEVIATIONS * stdev
+                if(dist_type == 'NORMAL'):
+                    delay_per_encounter = NormalDistribution(mean, stdev, max_delay_per_encounter, prob_encounter)
+                elif(dist_type == 'LOGNORMAL'):
+                    delay_per_encounter = LognormalDistribution(mean, stdev, max_delay_per_encounter, prob_encounter)
+                else:
+                    raise AssertionError('ERROR: unsupported delay distribution for multinomial: ' + dist_type + ' in file ' + MNDist_path)
+                MultinomialDistributions.append(MultinomialDistribution(num_trials, delay_per_encounter))
+                if(VERBOSITY > 1):
+                    print time.ctime() + ': Read multinomial distribution: ' + name                
+        TotalMultinomiallyDistributedDelay = CumulativeDistribution(MultinomialDistributions)
+        outfile_path = os.path.join(dir_path, 'MultinomialDistributions_' + SCENARIO + '_cumulative.csv')
+        with open(outfile_path, 'wb') as outfile:
+            MNDists_writer = csv.writer(outfile, dialect='excel')
+            delay_sec = 0
+            max_delay_sec = TotalMultinomiallyDistributedDelay.max_delay()
+            MNDists_writer.writerow(['CUMULATIVE DELAY DUE TO MULTINOMIALLY-DISTRIBUTED FACTORS (' + SCENARIO + ')'])
+            MNDists_writer.writerow(['Delay, sec', 'Cumulative Multinomially-Distributed Delay Probability, ' + SCENARIO])
+            while delay_sec <= max_delay_sec:
+                MNDists_writer.writerow([delay_sec, TotalMultinomiallyDistributedDelay.prob(delay_sec)])
+                delay_sec += 1
+            if(VERBOSITY > 0):
+                print time.ctime() + ': Wrote cumulative multinomially-distributed delay: ' + outfile_path
+    except IOError:
+        print 'No multinomial delay file found: ' + MNDist_path
+        print 'Excluding any multinomially-distrubted delays from analysis'
+        incl_MNDists = False
 
     # Process turning vehicles info
     incl_TurningVehs = True
     try:
-        with open(TurningVehs_Path, 'rb') as TurningVehs_csv:
+        with open(TurningVehs_path, 'rb') as TurningVehs_csv:
             if(VERBOSITY > 1):
                 print time.ctime() + ': reading in turning vehicle info'
             DelayProbabilityList = []
@@ -825,7 +940,7 @@ if __name__ == "__main__":
                 print time.ctime() + ': Read turning point set: ' + latest_set                      
         TotalTurningVehicleDelay = CumulativeDistribution(TurningPointSets)
         if(VERBOSITY > 0):
-            print time.ctime() + ': Calculated turning vehicle delays from: ' + TurningVehs_Path            
+            print time.ctime() + ': Calculated turning vehicle delays from: ' + TurningVehs_path            
         outfile_path = os.path.join(dir_path, 'TurningVehicles_' + SCENARIO + '_cumulative.csv')
         with open(outfile_path, 'wb') as outfile:
             tv_writer = csv.writer(outfile, dialect='excel')
@@ -839,7 +954,7 @@ if __name__ == "__main__":
             if(VERBOSITY > 0):
                 print time.ctime() + ': Wrote cumulative turning vehicle delay: ' + outfile_path
     except IOError:
-        print 'No turning vehicles file found: ' + TurningVehs_Path
+        print 'No turning vehicles file found: ' + TurningVehs_path
         print 'Excluding turning vehicle delay from analysis'
         incl_TurningVehs = False
 
@@ -953,6 +1068,11 @@ if __name__ == "__main__":
         if(len(delay_component_str) > 0):
             delay_component_str += '; '
         delay_component_str += 'Binomially-distributed delays'
+    if(incl_MNDists):
+        delay_component_dists.append(TotalMultinomiallyDistributedDelay)
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Multinomially-distributed delays'
     if(incl_TurningVehs):
         delay_component_dists.append(TotalTurningVehicleDelay)
         if(len(delay_component_str) > 0):
