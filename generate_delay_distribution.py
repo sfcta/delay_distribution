@@ -180,7 +180,7 @@ class NormalDistribution:
         # normal distribution
         duration_sec = 0
         cum_prob = Decimal(0)
-        while(duration_sec <= self.max):
+        while(duration_sec <= self.max and cum_prob < APPROXIMATE_CERTAINTY):
             this_prob = Decimal( math.exp(-1 * ((duration_sec-self.mean) ** 2) / (2*self.variance)) / math.sqrt(2 * Decimal(math.pi) * self.variance) )
             # scale to probability of the distribution applying
             this_prob *= self.prob_appl
@@ -242,7 +242,7 @@ class LognormalDistribution:
         # lognormal distribution
         duration_sec = 1
         cum_prob = self.prob_notappl
-        while(duration_sec <= self.max):
+        while(duration_sec <= self.max and cum_prob < APPROXIMATE_CERTAINTY):
             this_prob = 1/(duration_sec * Decimal(math.sqrt(2 * math.pi)) * self.sigma) * Decimal(math.exp(-1 * (Decimal(math.log(duration_sec))-self.mu)**2 / (2 * self.sigma**2)))
             # scale to probability of the distribution applying
             this_prob *= self.prob_appl
@@ -728,7 +728,8 @@ if __name__ == "__main__":
         
     dir_path = os.path.abspath(SPEC_DIR)
     BaseTT_path         = os.path.join(dir_path, 'BaseTravelTime_' + SCENARIO + '.csv')
-    TTAdjust_path       = os.path.join(dir_path, 'TravelTimeAdjustments_' + SCENARIO + '.csv')
+    TTAdjust_basepath   = os.path.join(dir_path, 'TravelTimeAdjustments_' + SCENARIO)
+    TTAdjust_endpath    = '.csv'
     BinomialDist_path   = os.path.join(dir_path, 'BinomialDistributions_' + SCENARIO + '.csv')
     MNDist_path         = os.path.join(dir_path, 'MultinomialDistributions_' + SCENARIO + '.csv')
     TurningVehs_path    = os.path.join(dir_path, 'TurningVehicles_' + SCENARIO + '.csv')
@@ -779,40 +780,56 @@ if __name__ == "__main__":
         
     # Process travel time adjustments
     incl_TTAdjust = True
+    file_idx = 1
+    thisfile_path = ''
+    TTAdjustments = []
     try:
-        with open(TTAdjust_path, 'rb') as TTAdjust_csv:
-            ProbabilityListIncreasedDelay = []
-            ProbabilityListReducedDelay = []
-            ttadjust_reader = csv.reader(TTAdjust_csv, dialect='excel')
-            header = ttadjust_reader.next() # throw away the header as it doesn't contain data
-            for row in ttadjust_reader:
-                delay_sec   = int(row[0])
-                probability = Decimal(row[1])
-                if(delay_sec >= 0):
-                    try:
-                        ProbabilityListIncreasedDelay.append(Decimal(0))
-                        ProbabilityListIncreasedDelay[delay_sec] = probability
-                    except IndexError:
-                        while len(ProbabilityListIncreasedDelay <= delay_sec):
+        # keep trying files til we try one that doesn't exist
+        while(True):
+            if(file_idx == 1):
+                thisfile_path = TTAdjust_basepath + TTAdjust_endpath
+            else:
+                thisfile_path = TTAdjust_basepath + '_' + str(file_idx) + TTAdjust_endpath
+            with open(thisfile_path, 'rb') as TTAdjust_csv:
+                ProbabilityListIncreasedDelay = []
+                ProbabilityListReducedDelay = []
+                ttadjust_reader = csv.reader(TTAdjust_csv, dialect='excel')
+                header = ttadjust_reader.next() # throw away the header as it doesn't contain data
+                for row in ttadjust_reader:
+                    delay_sec   = int(row[0])
+                    probability = Decimal(row[1])
+                    if(delay_sec >= 0):
+                        try:
                             ProbabilityListIncreasedDelay.append(Decimal(0))
-                        ProbabilityListIncreasedDelay[delay_sec] = probability
-                else:
-                    try:
-                        ProbabilityListReducedDelay.append(Decimal(0))
-                        ProbabilityListReducedDelay[-1*delay_sec] = probability
-                    except IndexError:
-                        while(len(ProbabilityListReducedDelay) <= -1*delay_sec):
+                            ProbabilityListIncreasedDelay[delay_sec] = probability
+                        except IndexError:
+                            while len(ProbabilityListIncreasedDelay <= delay_sec):
+                                ProbabilityListIncreasedDelay.append(Decimal(0))
+                            ProbabilityListIncreasedDelay[delay_sec] = probability
+                    else:
+                        try:
                             ProbabilityListReducedDelay.append(Decimal(0))
-                        ProbabilityListReducedDelay[-1*delay_sec] = probability                    
-                if(VERBOSITY > 7):
-                    print time.ctime() + ': Will adjust travel time by ' + str(delay_sec) + ' with probability ' + str(probability)
-        TTAdjustment = ArbitraryDistribution(ProbabilityListIncreasedDelay,ProbabilityListReducedDelay)
-        if(VERBOSITY > 0):
-            print time.ctime() + ': Calculated travel time adjustments from: ' + TTAdjust_path            
+                            ProbabilityListReducedDelay[-1*delay_sec] = probability
+                        except IndexError:
+                            while(len(ProbabilityListReducedDelay) <= -1*delay_sec):
+                                ProbabilityListReducedDelay.append(Decimal(0))
+                            ProbabilityListReducedDelay[-1*delay_sec] = probability                    
+                    if(VERBOSITY > 7):
+                        print time.ctime() + ': Will adjust travel time by ' + str(delay_sec) + ' with probability ' + str(probability)
+            TTAdjustment = ArbitraryDistribution(ProbabilityListIncreasedDelay,ProbabilityListReducedDelay)
+            TTAdjustments.append(TTAdjustment)
+            if(VERBOSITY > 0):
+                print time.ctime() + ': Calculated travel time adjustments from: ' + thisfile_path
+            file_idx += 1
     except IOError:
-        print 'No travel time adustment file found: ' + TTAdjust_path
-        print 'Excluding any adjustments from analysis'
-        incl_TTAdjust = False
+        if(file_idx == 1):
+            print 'No travel time adustment file found: ' + thisfile_path
+            print 'Excluding any adjustments from analysis'
+            incl_TTAdjust = False
+        else:
+            print 'File not found: ' + thisfile_path
+            print 'Only including travel time adjustments for first ' + str(file_idx - 1) + ' TravelTimeAdjustment files'
+            TotalTTAdjustments = CumulativeDistribution(TTAdjustments)
 
     # Process binomial distribution data
     incl_BinDists = True
@@ -1059,7 +1076,7 @@ if __name__ == "__main__":
             delay_component_str += '; '
         delay_component_str += 'Base travel time'
     if(incl_TTAdjust):
-        delay_component_dists.append(TTAdjustment)
+        delay_component_dists.append(TotalTTAdjustments)
         if(len(delay_component_str) > 0):
             delay_component_str += '; '
         delay_component_str += 'Travel time adjustments'
