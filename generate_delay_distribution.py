@@ -5,7 +5,7 @@
 import math, decimal, time
 from decimal import Decimal
 
-VERBOSITY = 5                               # higher values will produce more feedback (0-10)
+VERBOSITY = 9                               # higher values will produce more feedback (0-10)
 decimal.getcontext().prec = 6               # decimal precision
 MAX_DEVIATIONS = 5                          # in a normal or lognormal distribution, maximum deviations from the mean that will be analyzed.
                                             # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
@@ -147,10 +147,10 @@ class ArbitraryDistribution:
         return prob_this_time_sec
 
     def max_delay(self):
-        return -1 + len(self.probability_positive)
+        return max(0, -1 + len(self.probability_positive))
 
     def min_delay(self):
-        return -1 * (-1 + len(self.probability_negative))
+        return min(0, -1 * (-1 + len(self.probability_negative)))
         
 
 class NormalDistribution:
@@ -647,13 +647,13 @@ class CumulativeDistribution:
             self.partial_probs.append([[],[]]) # list for positive and negative delay lists for this trial
             delay_sec = delay_obj.min_delay()
             cum_prob = Decimal(0)
-            while(delay_sec <= max_delay):
+            while(delay_sec <= max_delay and cum_prob < APPROXIMATE_CERTAINTY):
                 this_prob = delay_obj.prob(delay_sec)
                 if(this_prob < 0):
                     raise AssertionError('Probability is negative: ' + str(this_prob))
                 if(delay_sec >= 0):
                     self.partial_probs[trial][0].append(this_prob)
-                else:
+                else: # reduction in delay
                     try:
                         self.partial_probs[trial][1][-1*delay_sec] = this_prob
                     except IndexError:
@@ -664,6 +664,13 @@ class CumulativeDistribution:
                 delay_sec += 1
         self.num_partials = len(self.partial_probs)
         self.calc_cum_probs()
+        # rescale based on cumulative probability
+        scaled_probability = []
+        if(VERBOSITY > 4):
+            print time.ctime() + ': scaling probabilities for cumulative distribution. unscaled total probability is ' + str(self.cum_prob)
+        for prob in self.probability:
+            scaled_probability.append(prob/self.cum_prob)
+        self.probability = scaled_probability
 
     def calc_cum_probs(self, existing_probs=[1]):
         new_probs = []
@@ -671,6 +678,7 @@ class CumulativeDistribution:
             addl_probs = self.partial_probs.pop(0)
             incr_probs = addl_probs[0]
             decr_probs = addl_probs[1]
+            self.cum_prob = Decimal(0)
         except IndexError:
             self.probability = existing_probs
             return
@@ -680,6 +688,7 @@ class CumulativeDistribution:
             for incr_delay in range(len(incr_probs)):
                 this_delay = delay_sec + incr_delay
                 this_prob = existing_probs[delay_sec] * incr_probs[incr_delay]
+                self.cum_prob += this_prob
                 while(True):
                     try:
                         new_probs[this_delay] += this_prob
@@ -690,6 +699,7 @@ class CumulativeDistribution:
             for decr_delay in range(len(decr_probs)):
                 this_delay = max(0, delay_sec - decr_delay)
                 this_prob = existing_probs[delay_sec] * decr_probs[decr_delay]
+                self.cum_prob += this_prob
                 while(True):
                     try:
                         new_probs[this_delay] += this_prob
@@ -816,8 +826,7 @@ if __name__ == "__main__":
                             ProbabilityListReducedDelay[-1*delay_sec] = probability                    
                     if(VERBOSITY > 7):
                         print time.ctime() + ': Will adjust travel time by ' + str(delay_sec) + ' with probability ' + str(probability)
-            TTAdjustment = ArbitraryDistribution(ProbabilityListIncreasedDelay,ProbabilityListReducedDelay)
-            TTAdjustments.append(TTAdjustment)
+            TTAdjustments.append(ArbitraryDistribution(ProbabilityListIncreasedDelay,ProbabilityListReducedDelay))
             if(VERBOSITY > 0):
                 print time.ctime() + ': Calculated travel time adjustments from: ' + thisfile_path
             file_idx += 1
@@ -1128,7 +1137,7 @@ if __name__ == "__main__":
             cumulative_writer.writerow([delay_sec, CumulativeCorridorDelay.prob(delay_sec)])
             delay_sec += 1
         if(VERBOSITY > 0):
-            print time.ctime() + ': Wrote cumulative boarding & alighting delay: ' + outfile_path
+            print time.ctime() + ': Wrote cumulative corridor delay: ' + outfile_path
             
     # Finish up
     if(VERBOSITY > 0):
