@@ -5,7 +5,7 @@
 import math, decimal, time
 from decimal import Decimal
 
-VERBOSITY = 9                               # higher values will produce more feedback (0-10)
+VERBOSITY = 8                               # higher values will produce more feedback (0-10)
 decimal.getcontext().prec = 6               # decimal precision
 MAX_DEVIATIONS = 5                          # in a normal or lognormal distribution, maximum deviations from the mean that will be analyzed.
                                             # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
@@ -38,9 +38,18 @@ input files:
                     - values in seconds
                 TravelTimeAdjustments_[scenario_name].csv
                     - columns: delay_sec, probability
+                    - note: can specify additional files as:
+                      TravelTimeAdjustments_[scenario_name]_2.csv
+                      TravelTimeAdjustments_[scenario_name]_3.csv
+                      etc.
                 BinomialDistributions_[scenario_name].csv
                     - columns: Name, n (number of trials), p (probability of
                       encounter at each trial), delay per encounter (seconds)
+                MultinomialDistributions_[scenario_name].csv
+                    - columns: Name, n (number of trials), p (probability of
+                      encounter at each trial), mean of delay per encounter (sec),
+                      standard deviation of delay per encounter (sec),
+                      distribution of delay per encounter ("normal" or "lognormal")
                 TurningVehicles_[scenario_name].csv
                     - columns: Turning Point Set, Number of Turning Points,
                       delay_sec (per point), probability (per point)
@@ -167,7 +176,7 @@ class NormalDistribution:
         assert_numeric(mu)
         assert_numeric(sigma)
         assert_numeric(max_time)
-        assert_numberic(prob_appl)
+        assert_numeric(prob_appl)
         self.mean = Decimal(mu)
         self.variance = Decimal(sigma)**2
         self.probability = []
