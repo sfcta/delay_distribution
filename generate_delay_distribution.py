@@ -274,9 +274,9 @@ class LognormalDistribution:
         assert_numeric(prob_appl)
         self.mu = Decimal(mu)
         self.sigma = Decimal(sigma)
-        self.mean = Decimal(exp(self.mu + (self.sigma ** 2)/2))
-        self.sd = Decimal(math.sqrt( (exp(self.sigma **2) - 1) * exp(2 * self.mu + self.sigma ** 2) ) )
-        self.max = Decimal(exp(max_log_time))
+        self.mean = Decimal(math.exp(self.mu + (self.sigma ** 2)/2))
+        self.sd = Decimal(math.sqrt( (math.exp(self.sigma **2) - 1) * math.exp(2 * self.mu + self.sigma ** 2) ) )
+        self.max = Decimal(math.exp(max_log_time))
         self.prob_appl = Decimal(prob_appl)
         self.prob_notappl = 1 - self.prob_appl
         if(self.prob_notappl > 1 or self.prob_notappl < 0):
@@ -444,7 +444,7 @@ class PoissonDistribution:
         k = 0
 
         while(cum_prob < APPROXIMATE_CERTAINTY and k <= max_count):
-            self.probability[k] = ((self.p_lambda ** k) / math.factorial(k)) * Decimal(math.exp(-1 * self.p_lambda))
+            self.probability.append( ((self.p_lambda ** k) / math.factorial(k)) * Decimal(math.exp(-1 * self.p_lambda)) )
             cum_prob += self.probability[k]
             k += 1
             
@@ -536,16 +536,18 @@ class TurningPoint:
     def __init__(self, veh_demand, left_turn, turn_lanes, ped_demand, curb_to_curb, exit_lanes, cycle_len, turn_phase, ped_phase):
         if(VERBOSITY > 3):
             print time.ctime() + ': creating turning point station object,'
-            print 'veh_demand: ' + veh_demand
-            print 'left_turn: ' + left_turn
-            print 'turn_lanes: ' + turn_lanes
-            print 'ped_demand: ' + ped_demand
-            print 'curb_to_curb: ' + curb_to_curb
-            print 'exit_lanes: ' + exit_lanes
-            print 'cycle_len: ' + cycle_len
-            print 'turn_phase: ' + turn_phase
-            print 'ped_phase: ' + ped_phase
+            print 'veh_demand: ' + str(veh_demand)
+            print 'left_turn: ' + str(left_turn)
+            print 'turn_lanes: ' + str(turn_lanes)
+            print 'ped_demand: ' + str(ped_demand)
+            print 'curb_to_curb: ' + str(curb_to_curb)
+            print 'exit_lanes: ' + str(exit_lanes)
+            print 'cycle_len: ' + str(cycle_len)
+            print 'turn_phase: ' + str(turn_phase)
+            print 'ped_phase: ' + str(ped_phase)
         # process input parameters (all must be nonnegative)
+        if cycle_len < 0: # not yet supported
+            raise AssertionError('TurningPoint: sorry, support for non-signalized intersections not yet implemented')
         assert_numeric(veh_demand, True)
         assert_numeric(1*left_turn, True) # multiply by 1 to accommodate boolean values
         assert_numeric(turn_lanes, True)
@@ -567,7 +569,7 @@ class TurningPoint:
         # validate and process functional parameters
         if self.left_turn not in (0,1):
             raise AssertionError('Error! Turning point delay: Left turn dummy value should be 0 or 1, instead got ' + str(left_turn))
-        if self.exit_lanes < self.curb_to_curb:
+        if self.exit_lanes > self.curb_to_curb:
             raise AssertionError('Error! Turning point delay: Pedestrian crossing distance is less than the number of exit lanes')
         if self.ped_phase > self.cycle_len or self.turn_phase > self.cycle_len:
             raise AssertionError('Error! Turning point delay: Cycle phase exceeds cycle length')
@@ -578,11 +580,13 @@ class TurningPoint:
         self.max_peds = self.ped_count_dist.max_count()
 
         self.probability = []
-        self.probability.append(self.ped_count_dist.prob(0)) # no delay if zero pedestrians
+        prob_no_peds = self.ped_count_dist.prob(0)
+        self.probability.append(prob_no_peds) # no delay if zero pedestrians
         cum_prob = self.probability[0]
 
         # calculate distribution of mean delay for turning vehicles
-        # regression model: log of delay (log-seconds)
+        # regression model: log of delay (log-seconds) (conditional on some delay existing)
+        # R-squared = 0.4279, SE = 0.7068
         mean_log_delay_regress = Decimal(-9.89102) * self.left_turn \
                                + Decimal(-0.71690) * self.curb_to_curb \
                                + Decimal(4.98453) * self.exit_lanes \
@@ -599,9 +603,10 @@ class TurningPoint:
             # apply regression model
             mean_log_delay_this_peds = mean_log_delay_regress \
                                        + Decimal(0.66538) * num_peds / self.ped_phase
-            max_log_delay = mean_log_delay_this_peds + MAX_DEVIATIONS * stdev_log_delay_regress
+            max_log_delay = mean_log_delay_this_peds + MAX_DEVIATIONS * stdev_mean_log_delay_regress
             delay_this_peds = LognormalDistribution(mean_log_delay_this_peds, stdev_mean_log_delay_regress, max_log_delay)
             delay_sec = 0
+            max_delay = delay_this_peds.max_delay()
             while delay_sec <= max_delay:
                 prob_this_delay = prob_this_peds * delay_this_peds.prob(delay_sec)
                 while True:
@@ -616,17 +621,60 @@ class TurningPoint:
             
         # rescale based on cumulative probability
         if(VERBOSITY > 4):
-            print time.ctime() + ': rescaling probabilities, base cumulative probability is ' + str(cum_prob) + ' (should be near 1)'
+            print time.ctime() + ': Turning Point: rescaling probabilities, base cumulative probability is ' + str(cum_prob) + ' (should be near 1)'
         scaled_probability = []
         for prob in self.probability:
             scaled_probability.append(prob/cum_prob)
         self.probability = scaled_probability
 
-        # NOTE: so far we have the probability distribution for the average delay for a turning vehicle
-        # need to adjust to find the probability distribution for the delay to through-moving bus
-        # i.e. for each # of turning vehs that could occur this cycle, what is the probability of that many
-        # turning vehs and what is the expected delay distribution for that many vehicles?
-        # how does that map to delay for the bus (i.e., 0 delay if no turning vehs; 50% chance of mean delay if 1 turning veh, etc)
+        # even conditional on peds being present, there is a 39/279 (~14%) chance that no veh delay is experienced.
+        # we'll take this as a haircut off the average vehicle delay probabilities
+        prob_no_delay_cond_peds = Decimal(39)/279
+        prob_delay_cond_peds = 1 - prob_no_delay_cond_peds
+        prob_peds_present = 1 - prob_no_peds
+        prob_no_delay_new = prob_no_peds + prob_no_delay_cond_peds * prob_peds_present
+        adjusted_probability = []
+        adjusted_probability.append(prob_no_delay_new) # this is the empirical probability of no delay
+        prob_delay_new = 1 - prob_no_delay_new
+        prob_delay_previous = 1 - self.probability[0]
+        adjustment_factor = prob_delay_new / prob_delay_previous
+        for prob in self.probability:
+            adjusted_probability.append(prob * adjustment_factor)
+        self.probability = adjusted_probability
+
+        if(VERBOSITY > 4):
+            cum_prob = Decimal(0)
+            for prob in self.probability:
+                cum_prob += prob
+            print time.ctime() + ': Turning Point: after adjustment, cumulative probability is ' + str(cum_prob) + ' (should be near 1)'
+
+        """ THIS SECTION NOT YET FINISHED
+        # self.probability now reflects the probability distribution for the average delay for turning vehicles within a signal cycle
+        # what is the probability of N turning vehicles during a given light cycle? it relates to the demand level:
+        num_veh_this_cycle = PoissonDistribution(self.veh_demand)
+
+        # what is the distribution of delay for individual vehicles? it relates to the average delay:
+        # standard deviation of delay / average delay = 0.14921 * number of vehicles    (R-squared = 0.4083, SE = 0.4311)
+
+        # how does this relate to the delay experienced by the bus? we assume a bus experiences delay equivalent to that of the turning 
+        # vehicle directly ahead of it. so if at least one vehicle is ahead of the bus, the distribution of delay is equivalent to the above.
+        # there is some chance that no turning vehicles are ahead of the bus, however, in which case there is no delay.
+        # this is given by: P(no turns ahead) = 1 - (0.5)^N    (where N is the number of turning vehicles this cycle)
+        max_veh = num_veh_this_cycle.max_count()
+        this_num_veh = 0
+        while this_num_veh <= max_veh:
+            prob_this_num_veh = num_veh_this_cycle.prob(this_num_veh)
+            prob_bus_behind_veh = 1 - (0.5)**this_num_veh
+            mean_delay_sec = 0
+            max_delay_sec = ???
+            while mean_delay_sec < max_delay_sec:
+                mean_delay_this_intersection = ???
+                expected_std_dev = Decimal(0.14921) * this_num_veh * mean_delay_this_intersection
+                std_dev_std_dev = Decimal(0.4311) * mean_delay_this_intersection
+                compound_std_dev = NormalDistribution(expected_std_dev, std_dev_std_dev
+                normal_error_this_num_veh = NormalDistribution(0, compound_std_dev, 
+                delay_this_num_veh = CumulativeDistribution(mean_delay_this_intersection, normal_error_this_num_veh)
+        """
 
     def prob(self, delay_sec):
         try:
@@ -1166,7 +1214,7 @@ if __name__ == "__main__":
                 ped_phase       = int(row[10])
                 if turn_dir in ('L', 'LEFT'): is_left_turn =  1
                 elif turn_dir in ('R', 'RIGHT'): is_left_turn = 0
-                else: raise AssertionError('Error! Turning vehicles (analytical spec): turn direction "' + turn_dir '" not valid (expected "L", "R", "LEFT" or "RIGHT")')
+                else: raise AssertionError('Error! Turning vehicles (analytical spec): turn direction "' + turn_dir + '" not valid (expected "L", "R", "LEFT" or "RIGHT")')
                 this_turning_point = TurningPoint(turns_per_hr, is_left_turn, num_turn_lanes, peds_per_hr, crossing_dist, exit_lanes, cycle_len, turn_phase, ped_phase)
                 for i in range(num_points):
                     TurningPoints.append(this_turning_point)                 
@@ -1186,7 +1234,7 @@ if __name__ == "__main__":
             if(VERBOSITY > 0):
                 print time.ctime() + ': Wrote cumulative turning vehicles (analytical spec) delay: ' + outfile_path
     except IOError:
-        print 'No turning vehicles analytical specification file found: ' + TurningVehsD_path
+        print 'No turning vehicles analytical specification file found: ' + TurningVehsA_path
         print 'Excluding turning vehicle (analytical spec) delay from analysis'
         incl_TurningVehsA = False
 
@@ -1373,11 +1421,16 @@ if __name__ == "__main__":
         if(len(delay_component_str) > 0):
             delay_component_str += '; '
         delay_component_str += 'Multinomially-distributed delays'
+    if(incl_TurningVehsA):
+        delay_component_dists.append(TotalTurningVehiclesAnalyticsDelay)
+        if(len(delay_component_str) > 0):
+            delay_component_str += '; '
+        delay_component_str += 'Turning vehicles (analytic spec)'
     if(incl_TurningVehsD):
         delay_component_dists.append(TotalTurningVehiclesDetailsDelay)
         if(len(delay_component_str) > 0):
             delay_component_str += '; '
-        delay_component_str += 'Turning vehicles'
+        delay_component_str += 'Turning vehicles (detailed spec)'
     if(incl_TrafficSignals):
         delay_component_dists.append(TotalTrafficSignalDelay)
         if(len(delay_component_str) > 0):
