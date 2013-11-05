@@ -5,8 +5,13 @@
 import math, decimal, time
 from decimal import Decimal
 
+# ADAM / DAN: INPUT FIXED DELAY DUE TO DECELERATION AND ACCELERATION OF BUS CAUSED BY SLOWING RIGHT-TURNING VEHICLES
+# VALUE IS A FIXED PENALTY IN SECONDS ANY TIME AT LEAST ONE VEHICLE EXECUTES A RIGHT TURN IN FRONT OF THE BUS
+# MUST BE AN INTEGER VALUE
+TURN_VEH_DECEL_ACCEL_PENALTY = int(0)
+
 # the following inputs must be integer values. these can be modified to meet your needs.
-VERBOSITY = 8                               # higher values will produce more feedback (0-10)
+VERBOSITY = 9                               # higher values will produce more feedback (0-10)
 decimal.getcontext().prec = 6               # decimal precision (number of sig figs)
 MAX_DEVIATIONS = 5                          # in a normal or lognormal distribution, maximum deviations from the mean that will be analyzed.
                                             # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
@@ -309,6 +314,7 @@ class LognormalDistribution:
                 print time.ctime() + ': LognormalDistribution: assigned lognormal distribution: ' + str(duration_sec) + ', probability: ' + str(this_prob)
                 print time.ctime() + ': LognormalDistribution: cumulative probability now: ' + str(cum_prob)
             duration_sec += 1
+
 
         # rescale based on cumulative probability
         if(VERBOSITY > 4):
@@ -705,7 +711,9 @@ class TurningPoint:
             prob_this_num_veh = num_veh_this_cycle.prob(this_num_veh)
             prob_bus_behind_veh = 1 - Decimal(0.5)**this_num_veh
             # if bus is not behind any turning vehicles, there is no delay
-            bus_delay_probability[0] += prob_this_num_veh * (1 - prob_bus_behind_veh)
+            prob_not_behind_turning_vehs = prob_this_num_veh * (1 - prob_bus_behind_veh)
+            bus_delay_probability[0] += prob_not_behind_turning_vehs
+            cum_prob += prob_not_behind_turning_vehs
             if VERBOSITY > 6:
                 print time.ctime() + ': TurningPoint: Calculating delay experienced by bus, ' + str(this_num_veh) + ' turning veh within signal cycle; conditional probability: ' + str(prob_this_num_veh) + ', prior cum. prob: ' + str(cum_prob)
             max_mean_delay_sec = self.max_delay() # maximum average delay for turning vehicles this cycle
@@ -729,21 +737,35 @@ class TurningPoint:
                     prob_this_bus_delay = expected_delay_dist.prob(bus_delay_sec)
                     unconditional_prob = prob_this_num_veh * prob_bus_behind_veh * prob_this_mean_delay * prob_this_bus_delay
                     if VERBOSITY > 8:
-                        print time.ctime() + ': TurningPoint: Calculating delay experienced by bus, ' + str(this_num_veh) + ' turning veh, mean delay: ' + str(mean_delay_sec) + ', bus delay: ' + str(bus_delay_sec) + ', absolute probability: ' + str(unconditional_prob) + ', cum. prob: ' + str(cum_prob)
+                        print time.ctime() + ': TurningPoint: Calculating delay experienced by bus, ' + str(this_num_veh) + ' turning veh, mean delay: ' + str(mean_delay_sec) + ', bus delay (excl. decel/accel): ' + str(bus_delay_sec) + ', absolute probability: ' + str(unconditional_prob) + ', cum. prob: ' + str(cum_prob)
                     while True:
                         try:
-                            bus_delay_probability[bus_delay_sec] += unconditional_prob
+                            bus_delay_probability[bus_delay_sec + TURN_VEH_DECEL_ACCEL_PENALTY] += unconditional_prob
                             cum_prob += unconditional_prob
                             break
                         except IndexError:
                             bus_delay_probability.append(Decimal(0))
+
+        if(VERBOSITY > 8):
+            print time.ctime() + ': TurningPoint: ostensible cumulative probability is ' + str(cum_prob)
+            
+        cum_prob = 0
+        for prob in bus_delay_probability:
+            cum_prob += prob
+            
+        if(VERBOSITY > 8):
+            print time.ctime() + ': TurningPoint: recalculated cumulative probability is ' + str(cum_prob)                
             
         # rescale based on cumulative probability and assign to self.probability
         if(VERBOSITY > 4):
             print time.ctime() + ': TurningPoint: rescaling probabilities, base cumulative probability (for bus delay) is ' + str(cum_prob) + ' (should be near 1)'
         scaled_probability = []
+        i = 0
         for prob in bus_delay_probability:
             scaled_probability.append(prob/cum_prob)
+            if(VERBOSITY > 8):
+                print time.ctime() + ': TurningPoint: Probability of ' + str(i) + ' sec delay is: ' + str(prob/cum_prob)
+                i += 1
         self.probability = scaled_probability
                     
 
