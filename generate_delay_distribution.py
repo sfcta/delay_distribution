@@ -8,7 +8,7 @@ from decimal import Decimal
 # ADAM / DAN: INPUT FIXED DELAY DUE TO DECELERATION AND ACCELERATION OF BUS CAUSED BY SLOWING RIGHT-TURNING VEHICLES
 # VALUE IS A FIXED PENALTY IN SECONDS ANY TIME AT LEAST ONE VEHICLE EXECUTES A RIGHT TURN IN FRONT OF THE BUS
 # MUST BE AN INTEGER VALUE
-TURN_VEH_DECEL_ACCEL_PENALTY = int(0)
+TURN_VEH_DECEL_ACCEL_PENALTY = int(1)
 
 # the following inputs must be integer values. these can be modified to meet your needs.
 VERBOSITY = 9                               # higher values will produce more feedback (0-10)
@@ -606,7 +606,8 @@ class TurningPoint:
         # calculate distribution of mean delay for turning vehicles
         # regression model: log of delay (log-seconds) (conditional on some delay existing)
         # R-squared = 0.4279, SE = 0.7068
-        mean_log_delay_regress = Decimal(-9.89102) * self.left_turn \
+        mean_log_delay_regress = Decimal(1.50447) \
+                               + Decimal(-9.89102) * self.left_turn \
                                + Decimal(-0.71690) * self.curb_to_curb \
                                + Decimal(4.98453) * self.exit_lanes \
                                + Decimal(-0.09112) * self.turn_phase \
