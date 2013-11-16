@@ -8,10 +8,10 @@ from decimal import Decimal
 # ADAM / DAN: INPUT FIXED DELAY DUE TO DECELERATION AND ACCELERATION OF BUS CAUSED BY SLOWING RIGHT-TURNING VEHICLES
 # VALUE IS A FIXED PENALTY IN SECONDS ANY TIME AT LEAST ONE VEHICLE EXECUTES A RIGHT TURN IN FRONT OF THE BUS
 # MUST BE AN INTEGER VALUE
-TURN_VEH_DECEL_ACCEL_PENALTY = int(1)
+TURN_VEH_DECEL_ACCEL_PENALTY = int(0)
 
 # the following inputs must be integer values. these can be modified to meet your needs.
-VERBOSITY = 9                               # higher values will produce more feedback (0-10)
+VERBOSITY = 7                               # higher values will produce more feedback (0-10)
 decimal.getcontext().prec = 6               # decimal precision (number of sig figs)
 MAX_DEVIATIONS = 5                          # in a normal or lognormal distribution, maximum deviations from the mean that will be analyzed.
                                             # in a poisson distribution, maximum variances from the mean (multiple of the mean) that will be analyzed.
@@ -695,7 +695,8 @@ class TurningPoint:
         # how does this relate to the delay experienced by the bus? we assume a bus experiences delay equivalent to that of the turning 
         # vehicle directly ahead of it. so if at least one vehicle is ahead of the bus, the distribution of delay is equivalent to the above.
         # there is some chance that no turning vehicles are ahead of the bus, however, in which case there is no delay.
-        # this is given by: P(no turns ahead) = 1 - (0.5)^N    (where N is the number of turning vehicles this cycle)
+        # the probability that at least one turning vehicle is ahead of the bus is given by:
+        # P(turns ahead) = 1 - (0.5)^N    (where N is the number of turning vehicles this cycle)
         if VERBOSITY > 5:
             print time.ctime() + ': TurningPoint: Calculating delay experienced by bus'
         bus_delay_probability = []
@@ -1003,7 +1004,16 @@ class CumulativeDistribution:
             print time.ctime() + ': CumulativeDistribution: creating cumulative distribution object'
         self.probability = []
         self.partial_probs = []
-        for trial in range(len(delay_obj_list)):
+        self.num_delay_objs = len(delay_obj_list)
+        if(VERBOSITY > 5):
+            print time.ctime() + ': CumulativeDistribution: calculating cumulative delay from ' + str(self.num_delay_objs) + ' component delay objects'
+        if self.num_delay_objs == 0:
+            self.probability.append(1)
+            return
+        for trial in range(self.num_delay_objs):
+            if(VERBOSITY > 6):
+                if(trial <= 5 or (trial < 100 and trial % 10 == 0) or trial % 50 == 0 or VERBOSITY > 8):
+                    print time.ctime() + ': CumulativeDistribution: tallying cumulative delay from component ' + str(trial)
             delay_obj = delay_obj_list[trial]
             max_delay = delay_obj.max_delay()
             self.partial_probs.append([[],[]]) # list for positive and negative delay lists for this trial
@@ -1035,6 +1045,11 @@ class CumulativeDistribution:
         self.probability = scaled_probability
 
     def calc_cum_probs(self, existing_probs=[1]):
+        if(VERBOSITY > 6):
+            remaining_components = len(self.partial_probs)
+            component_id = self.num_delay_objs - remaining_components
+            if(component_id <= 5 or (component_id < 100 and component_id % 10 == 0) or component_id % 50 == 0 or VERBOSITY > 8):
+                print time.ctime() + ': CumulativeDistribution: calculating cumulative probabilities; remaining components: ' + str(remaining_components)
         new_probs = []
         try:
             addl_probs = self.partial_probs.pop(0)
