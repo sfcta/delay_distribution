@@ -1,11 +1,60 @@
 """ Script to calculate cumulative distribution of travel time given various elements of travel time and delay
-    teo@sfcta.org, 10/25/2013
+    Implements 'Trial Bus' statistical technique
+    Data must be provided in the form of CSV files (see details at USAGE below).
+
+    This file is organized as follows:
+        1.  Housekeeping - importing packages, setting constants, USAGE parameter.
+                *   Constants that affect the precision and run time of the script are set here
+                *   The VERBOSITY constant, which affects debug output, is also set here
+        2.  Global functions - support functions that are not specific to any type of
+            delay or delay distribution.
+        3.  Travel time distributions - classes for all components of travel time or delay:
+                *   Arbitrary Distribution - can represent second-by-second probabilities for
+                    any travel time component, including travel time reductions (negative delay)
+                *   Normal Distribution - represents probabilities for normally-distributed
+                    travel time components (or subcomponents), only for positive delay values
+                    (negative portions of the distribution are discarded and the distribution is
+                    rescaled accordingly)
+                *   Lognormal Distribution - represents probabilities for lognormally-distributed
+                    travel time components (or subcomponents), only for positive delay values
+                    (negative portions of the distribution are discarded and the distribution is
+                    rescaled accordingly). Two constructors are available (mean and s.d. of
+                    lognormal variable, or mean and s.d. of normal dist. of which this variable
+                    is log-distributed).
+                *   Binomial Distribution - represents probabilities for binomially-distributed
+                    travel time components (or subcomponents), only for positive delay values
+                    (negative portions of the distribution are discarded and the distribution is
+                    rescaled accordingly)
+                *   Multinomial Distribution - represents probabilities for multinomially-distributed
+                    travel time components (or subcomponents), only for positive delay values
+                    (negative portions of the distribution are discarded and the distribution is
+                    rescaled accordingly). Accepts an arbitrary number of categories for the
+                    component categorical distributions, which must be provided as a probability
+                    distribution object (e.g., Arbitrary Distribution, Normal Distribution, Lognormal
+                    Distribution).
+
+
+
+    The following types of delay are stubbed out but not yet implemented:
+        * StopSigns_[scenario_name].csv [*NOT YET BUILT OUT*]
+            - columns: Name, Fixed delay, Wait probability, Max wait
+            - values in seconds (except probability)
+        * PedXings_[scenario_name].csv [*NOT YET BUILT OUT*]
+            - columns: Name, Delay probability, Max delay (seconds)
+        
+    Authors:
+        teo@sfcta.org, 12/16/2013
 """
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+@@@ 1. HOUSEKEEPING
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 import math, decimal, time
 from decimal import Decimal
 
-# ADAM / DAN: INPUT FIXED DELAY DUE TO DECELERATION AND ACCELERATION OF BUS CAUSED BY SLOWING RIGHT-TURNING VEHICLES
+# CONSTANT: INPUT FIXED DELAY DUE TO DECELERATION AND ACCELERATION OF BUS CAUSED BY SLOWING RIGHT-TURNING VEHICLES
 # VALUE IS A FIXED PENALTY IN SECONDS ANY TIME AT LEAST ONE VEHICLE EXECUTES A RIGHT TURN IN FRONT OF THE BUS
 # MUST BE AN INTEGER VALUE
 TURN_VEH_DECEL_ACCEL_PENALTY = int(0)
@@ -24,8 +73,11 @@ APPROXIMATE_CERTAINTY = 1-APPROXIMATE_ZERO
 
 USAGE = """
 
-Delay Distribution Generator: Calculates cumulative distribution given
-various elements of delay. Accurate to 1-second resolution.
+Delay Distribution Generator: Calculates cumulative distribution of delay
+or travel time given various elements of delay or travel time components. 
+Accurate to 1-second resolution. Output is in the form of a CSV file which
+provides the probabilities of duration for each possible value of time, in
+seconds.
 
 USAGE:
 
@@ -93,11 +145,6 @@ input files:
                 TrafficSignals_[scenario_name].csv
                     - columns: Name, Cycle time, Green time, Fixed delay
                     - values in seconds
-                StopSigns_[scenario_name].csv [**NOT YET BUILT OUT**]
-                    - columns: Name, Fixed delay, Wait probability, Max wait
-                    - values in seconds (except probability)
-                PedXings_[scenario_name].csv [**NOT YET BUILT OUT**]
-                    - columns: Name, Delay probability, Max delay (seconds)
                 StationsStops_[scenario_name].csv
                     - columns: Name, Fixed delay (seconds), Number of doors,
                                Hourly boardings, Hourly alightings,
@@ -110,6 +157,11 @@ input files:
                                     0 or FALSE or NO if stop can be skipped
                                     when no pax wish to board or alight)
 """
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+@@@ 2. GLOBAL FUNCTIONS
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 def assert_numeric(obj, non_neg=False):
     if not isinstance(obj, (int, long, float, Decimal)):
@@ -127,13 +179,29 @@ def assert_decimal(obj, non_neg=False):
         if(obj < 0):
             raise AssertionError('Data error: ' + str(obj) + ' is less than zero')
 
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+@@@ 3. TRAVEL TIME DISTRIBUTIONS
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+#####################################################
+### ARBITRARY DISTRIBUTION
+#####################################################
+
 class ArbitraryDistribution:
     """ Duration object for arbitrarily distruted timeframes
-        Requires list of probabilities for each duration, in seconds as follows:
-        increase_prob = [prob_0_sec_increase, prob_1_sec_increase, prob_2_sec_increase, ...]
-        reduction_prob = [prob_0_sec_reduction, prob_1_sec_reduction, prob_2_sec_reduction, ...]
-        probabilities of no increase and no reduction will be added separately
-        NOTE: This distribution can capture negative values of delay (i.e. reductions in delay)
+        
+        .. note:: This distribution can capture negative values of delay (i.e. reductions in delay).
+
+        .. note::
+           The sum of all probabilities should be 1 (but will be rescaled if they are approximate).
+           Probabilities of no increase and no reduction will both be counted and should not be provided redundantly.
+        
+        Requires list of probabilities (Decimal, float OK) for each duration in seconds as follows:
+        
+        :param increase_prob: ``[prob_0_sec_increase, prob_1_sec_increase, prob_2_sec_increase, ...]``
+        :param reduction_prob: ``[prob_0_sec_reduction, prob_1_sec_reduction, prob_2_sec_reduction, ...]``
+        
     """
     def __init__(self, increase_prob=[], reduction_prob=[]):
         if(VERBOSITY > 3):
@@ -174,6 +242,9 @@ class ArbitraryDistribution:
         self.probability_negative = scaled_probability_negative
         
     def prob(self, time_sec):
+        """ Given an integer number of seconds of delay, returns the Decimal probability
+            of that many seconds of delay as modeled by this probability distribution.
+        """
         prob_this_time_sec = Decimal(0)
         if (time_sec >= 0):
             try:
@@ -192,7 +263,12 @@ class ArbitraryDistribution:
 
     def min_delay(self):
         return min(0, -1 * (-1 + len(self.probability_negative)))
-        
+
+ 
+#####################################################
+### NORMAL DISTRIBUTION
+#####################################################
+
 
 class NormalDistribution:
     """ Duration object for normally-distributed headways and travel time
@@ -266,6 +342,9 @@ class NormalDistribution:
         return 0
 
 
+#####################################################
+### LOGNORMAL DISTRIBUTION
+#####################################################
 
 class LognormalDistribution:
     """ Duration object for lognormally-distributed timeframes
@@ -353,7 +432,12 @@ class LognormalDistribution:
 
     def min_delay(self):
         return 0            
-        
+
+
+#####################################################
+### BINOMIAL DISTRIBUTION
+#####################################################
+
 
 class BinomialDistribution:
     """ Duration object for binomially-distributed delays
@@ -401,6 +485,10 @@ class BinomialDistribution:
     def min_delay(self):
         return 0
 
+
+#####################################################
+### MULTINOMIAL DISTRIBUTION
+#####################################################
 
 class MultinomialDistribution:
     """ Duration object for multinomially-distributed delays
