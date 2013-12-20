@@ -52,7 +52,7 @@ For details on the CSV files to provide and how to name them, see :doc:`delay_di
 
 The tool will output feedback and debug text to standard output. Therefore, it is advisable to pipe output to a debug file, as in ``python generate_delay_distribution.py [scenario_name] spec_dir > debug_feedback.txt``
 
-Two Windows batch files are provided to facilitate this execution on Windows, especially in cases where one wishes to run many scenarios simulaneously. They pipe output to timestamped files.
+Two Windows batch files are provided in the `batchfiles directory <https://github.com/sfcta/delay_distribution/tree/master/batchfiles>`_ to facilitate this execution on Windows, especially in cases where one wishes to run many scenarios simulaneously. They pipe output to timestamped files.
     * ``CalculateDelayDistributions.bat`` allows specification of the ``RUNDIR`` (the directory containing the CSV input files, which will also be the destination of the output files), the ``SCRIPTDIR`` (the directory where the Travel Time Distribution Tool scripts are located), and the scenarios to be tested.
     * ``CallDelayDistScript.bat`` actually calls the generator script based on the parameters provided in ``CalculateDelayDistributions.bat``.
 
