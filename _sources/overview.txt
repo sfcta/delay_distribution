@@ -1,6 +1,18 @@
 Travel Time Distribution Tool Overview
 ======================================
 
+Tool Repository
+---------------
+
+The Travel Time Distribution Tool lives in the GitHub repository at 
+
+    https://github.com/sfcta/delay_distribution
+
+The generator script, all source code, and even the source for this documentation can be found in the above-linked repository.
+
+The documentation you are reading now is posted at 
+
+    http://sfcta.github.io/delay_distribution/
 
 Trial Bus Method
 ----------------
