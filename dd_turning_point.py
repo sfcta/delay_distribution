@@ -51,6 +51,7 @@ class TurningPoint:
 
         .. note:: Generally, an instance of this class will be used to model delay to a through-moving bus or tram
             experienced as a result of vehicles slowing or queuing to turn from the bus or tram's lane onto a side street.
+            
                 *   *Example*: If the bus/tram operates in the rightmost lane and left turns are not allowed from that lane, then an instance
                     would be used to model delay due to right-turning vehicles at a given intersection.
                 *   *Example*: If the bus/tram operates in a single-lane, one-way street that allows both right and left turns from the same
