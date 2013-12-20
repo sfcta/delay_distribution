@@ -6,7 +6,7 @@ Tool Repository
 
 The Travel Time Distribution Tool lives in the GitHub repository at 
 
-    https://github.com/sfcta/delay_distribution
+    https://github.com/sfcta/delay_distribution/
 
 The generator script, all source code, and even the source for this documentation can be found in the above-linked repository.
 
