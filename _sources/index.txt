@@ -9,6 +9,7 @@ Contents:
 .. toctree::
    :maxdepth: 5
    
+   includeme
    overview
    delay_dist_generator
    cumulative_distribution
