@@ -21,7 +21,7 @@ The Travel Time Distribution Tool is currently implemented as a Python script th
 
 The below flow-chart illustrates this architecture.
 
-.. image:: images/flowchart_v1.png
+.. image:: _images/flowchart_v1.png
 
 The tool has been tested with Python 2.7. It is not compatible with Python 2.6 due to limitations of the ``decimal`` module in earlier releases. It is likely to work with Python 3 but this has not been tested.
 
