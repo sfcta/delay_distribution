@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Welcome to Travel Time Distribution Tool’s documentation! &mdash; Travel Time Distribution Tool 2.0 documentation</title>
+    <title>Travel Time Distribution Tool: Welcome &mdash; Travel Time Distribution Tool 2.0 documentation</title>
     
     <link rel="stylesheet" href="_static/default.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -23,7 +23,8 @@
     <script type="text/javascript" src="_static/jquery.js"></script>
     <script type="text/javascript" src="_static/underscore.js"></script>
     <script type="text/javascript" src="_static/doctools.js"></script>
-    <link rel="top" title="Travel Time Distribution Tool 2.0 documentation" href="#" /> 
+    <link rel="top" title="Travel Time Distribution Tool 2.0 documentation" href="#" />
+    <link rel="next" title="Travel Time Distribution Tool Overview" href="overview.html" /> 
   </head>
   <body>
     <div class="related">
@@ -35,6 +36,9 @@
         <li class="right" >
           <a href="py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
+        <li class="right" >
+          <a href="overview.html" title="Travel Time Distribution Tool Overview"
+             accesskey="N">next</a> |</li>
         <li><a href="#">Travel Time Distribution Tool 2.0 documentation</a> &raquo;</li> 
       </ul>
     </div>  
@@ -44,227 +48,42 @@
         <div class="bodywrapper">
           <div class="body">
             
-  <div class="section" id="welcome-to-travel-time-distribution-tool-s-documentation">
-<h1>Welcome to Travel Time Distribution Tool&#8217;s documentation!<a class="headerlink" href="#welcome-to-travel-time-distribution-tool-s-documentation" title="Permalink to this headline">¶</a></h1>
-<p>Contents:</p>
+  <div class="section" id="travel-time-distribution-tool-welcome">
+<h1>Travel Time Distribution Tool: Welcome<a class="headerlink" href="#travel-time-distribution-tool-welcome" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="contents">
+<h2>Contents:<a class="headerlink" href="#contents" title="Permalink to this headline">¶</a></h2>
 <div class="toctree-wrapper compound">
-<ul class="simple">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Travel Time Distribution Tool Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#trial-bus-method">Trial Bus Method</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#technical-architecture">Technical Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#invoking-the-tool">Invoking the Tool</a></li>
 </ul>
-</div>
-<span class="target" id="module-generate_delay_distribution"></span><p>Script to calculate cumulative distribution of travel time given various elements of travel time and delay
-Implements &#8216;Trial Bus&#8217; statistical technique
-Data must be provided in the form of CSV files (see details at USAGE below).</p>
-<dl class="docutils">
-<dt>This file is organized as follows:</dt>
-<dd><ol class="first last arabic">
-<li><dl class="first docutils">
-<dt>Housekeeping - importing packages, setting constants, USAGE parameter.</dt>
-<dd><ul class="first last simple">
-<li>Constants that affect the precision and run time of the script are set here</li>
-<li>The VERBOSITY constant, which affects debug output, is also set here</li>
-</ul>
-</dd>
-</dl>
 </li>
-<li><p class="first">Global functions - support functions that are not specific to any type of
-delay or delay distribution.</p>
+<li class="toctree-l1"><a class="reference internal" href="delay_dist_generator.html">Delay Distribution Generator (generate_delay_distribution)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="delay_dist_generator.html#this-script-accepts-the-input-as-provided-in-csv-files-as-follows">This script accepts the input as provided in CSV files as follows.</a></li>
+<li class="toctree-l2"><a class="reference internal" href="delay_dist_generator.html#output-csv-files-are-produced-as-follows">Output CSV files are produced as follows.</a></li>
+</ul>
 </li>
-<li><dl class="first docutils">
-<dt>Travel time distributions - classes for all components of travel time or delay:</dt>
-<dd><ul class="first last simple">
-<li>Arbitrary Distribution - can represent second-by-second probabilities for
-any travel time component, including travel time reductions (negative delay)</li>
-<li>Normal Distribution - represents probabilities for normally-distributed
-travel time components (or subcomponents), only for positive delay values
-(negative portions of the distribution are discarded and the distribution is
-rescaled accordingly)</li>
-<li>Lognormal Distribution - represents probabilities for lognormally-distributed
-travel time components (or subcomponents), only for positive delay values
-(negative portions of the distribution are discarded and the distribution is
-rescaled accordingly). Two constructors are available (mean and s.d. of
-lognormal variable, or mean and s.d. of normal dist. of which this variable
-is log-distributed).</li>
-<li>Binomial Distribution - represents probabilities for binomially-distributed
-travel time components (or subcomponents), only for positive delay values
-(negative portions of the distribution are discarded and the distribution is
-rescaled accordingly)</li>
-<li>Multinomial Distribution - represents probabilities for multinomially-distributed
-travel time components (or subcomponents), only for positive delay values
-(negative portions of the distribution are discarded and the distribution is
-rescaled accordingly). Accepts an arbitrary number of categories for the
-component categorical distributions, which must be provided as a probability
-distribution object (e.g., Arbitrary Distribution, Normal Distribution, Lognormal
-Distribution).</li>
+<li class="toctree-l1"><a class="reference internal" href="cumulative_distribution.html">Cumulative Delays (cumulative_distribution)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="time_count_distributions_generic.html">Generic Delay and Event Distributions (time_count_distributions_generic)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dd_source_specific.html">Source-Specific Delay Distributions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dd_source_specific.html#delay-distribution-for-traffic-signals-dd-traffic-signal">Delay Distribution for Traffic Signals (dd_traffic_signal)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dd_source_specific.html#delay-distribution-for-train-stations-and-bus-stops-dd-train-station">Delay Distribution for Train Stations and Bus Stops (dd_train_station)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dd_source_specific.html#delay-distribution-for-turning-vehicles-dd-turning-point">Delay Distribution for Turning Vehicles (dd_turning_point)</a></li>
 </ul>
-</dd>
-</dl>
 </li>
-</ol>
-</dd>
-<dt>The following types of delay are stubbed out but not yet implemented:</dt>
-<dd>StopSigns_[scenario_name].csv [<strong>NOT YET BUILT OUT</strong>]
-- columns: Name, Fixed delay, Wait probability, Max wait
-- values in seconds (except probability)
-PedXings_[scenario_name].csv [<strong>NOT YET BUILT OUT</strong>]
-- columns: Name, Delay probability, Max delay (seconds)</dd>
-<dt>Authors:</dt>
-<dd><a class="reference external" href="mailto:teo&#37;&#52;&#48;sfcta&#46;org">teo<span>&#64;</span>sfcta<span>&#46;</span>org</a>, 12/16/2013</dd>
-</dl>
-<dl class="class">
-<dt id="generate_delay_distribution.ArbitraryDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">ArbitraryDistribution</tt><big>(</big><em>increase_prob=</em><span class="optional">[</span><span class="optional">]</span>, <em>reduction_prob=</em><span class="optional">[</span><span class="optional">]</span><big>)</big><a class="headerlink" href="#generate_delay_distribution.ArbitraryDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Duration object for arbitrarily distruted timeframes</p>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p class="last">This distribution can capture negative values of delay (i.e. reductions in delay).</p>
-</div>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p class="last">The sum of all probabilities should be 1 (but will be rescaled if they are approximate).
-Probabilities of no increase and no reduction will both be counted and should not be provided redundantly.</p>
-</div>
-<p>Requires list of probabilities for each duration, in seconds as follows:</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>increase_prob</strong> &#8211; <tt class="docutils literal"><span class="pre">[prob_0_sec_increase,</span> <span class="pre">prob_1_sec_increase,</span> <span class="pre">prob_2_sec_increase,</span> <span class="pre">...]</span></tt></li>
-<li><strong>reduction_prob</strong> &#8211; <tt class="docutils literal"><span class="pre">[prob_0_sec_reduction,</span> <span class="pre">prob_1_sec_reduction,</span> <span class="pre">prob_2_sec_reduction,</span> <span class="pre">...]</span></tt></li>
 </ul>
-</td>
-</tr>
-</tbody>
-</table>
-<dl class="method">
-<dt id="generate_delay_distribution.ArbitraryDistribution.prob">
-<tt class="descname">prob</tt><big>(</big><em>time_sec</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.ArbitraryDistribution.prob" title="Permalink to this definition">¶</a></dt>
-<dd><p>Given an integer number of seconds of delay, returns the Decimal probability
-of that many seconds of delay as modeled by this probability distribution.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.BinomialDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">BinomialDistribution</tt><big>(</big><em>binomial_n</em>, <em>binomial_p</em>, <em>delay_per_encounter</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.BinomialDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Duration object for binomially-distributed delays
-Requires number of trials (n), probability of encounter (p),
-delay per encounter (fixed, seconds)</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.CumulativeDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">CumulativeDistribution</tt><big>(</big><em>delay_obj_list</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.CumulativeDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Calculates the cumulative distribution of delay, given components of delay
-Requires a set of one or more objects which must each have a prob() function
-that returns the probability of delay, in seconds, as passed to the function,
-a max_delay() function which returns the maximum possible delay, in seconds,
-and a min_delay() function which returns the minimum possible delay (0 or
-negative), in seconds</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.LognormalDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">LognormalDistribution</tt><big>(</big><em>mu</em>, <em>sigma</em>, <em>max_log_time</em>, <em>prob_appl=1</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.LognormalDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Duration object for lognormally-distributed timeframes
-Requires EITHER mu, sigma, max log-time in log-seconds for normally distributed variable of which the timeframe is the log
-OR mean and standard deviation of time, and maximum possible time, in seconds (use from_mean_stdev &#64;classmethod)
-OPTIONAL: probability of delay or that distribution does apply (assumed to be 1 if not provided)</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.MultinomialDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">MultinomialDistribution</tt><big>(</big><em>multinomial_n</em>, <em>delay_per_trial</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.MultinomialDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Duration object for multinomially-distributed delays
-Requires number of trials (n), delay per trial (probability distribution)</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.NormalDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">NormalDistribution</tt><big>(</big><em>mu</em>, <em>sigma</em>, <em>max_time</em>, <em>prob_appl=1</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.NormalDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Duration object for normally-distributed headways and travel time
-Requires mean and standard deviation of time, and maximum possible time, in seconds
-OPTIONAL: probability of delay or that distribution does apply (assumed to be 1 if not provided)</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.PoissonDistribution">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">PoissonDistribution</tt><big>(</big><em>p_lambda</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.PoissonDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>Count object for randomly occuring independent events
-Requires average number of events per unit time</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.TrafficSignal">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">TrafficSignal</tt><big>(</big><em>cycle_time</em>, <em>green_time</em>, <em>fixed_delay=Decimal('0')</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.TrafficSignal" title="Permalink to this definition">¶</a></dt>
-<dd><p>Delay object for traffic signals
-Requires cycle time, green time, and any fixed delay beyond waiting for green (all in seconds)</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.TrainStation">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">TrainStation</tt><big>(</big><em>fixed_delay</em>, <em>doors</em>, <em>board_demand</em>, <em>alight_demand</em>, <em>board_pace</em>, <em>alight_pace</em>, <em>headway_obj</em>, <em>required_stop=False</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.TrainStation" title="Permalink to this definition">¶</a></dt>
-<dd><p>Delay object for train stations
-Requires fixed delay, hourly boardings, hourly alightings, number of doors,
-boarding time per pax per door, alighting time per pax per door,
-headway object (must have prob() function that returns the probability of given headway, in seconds, as passed).
-Optional: Stop requirement (defaults to False) - means the train stops even if no passengers board or alight
-Note: probabilities precise only as specified by APPROXIMATE_CERTAINTY</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="generate_delay_distribution.TurningPoint">
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">TurningPoint</tt><big>(</big><em>veh_demand</em>, <em>left_turn</em>, <em>turn_lanes</em>, <em>ped_demand</em>, <em>curb_to_curb</em>, <em>exit_lanes</em>, <em>cycle_len</em>, <em>turn_phase</em>, <em>ped_phase</em><big>)</big><a class="headerlink" href="#generate_delay_distribution.TurningPoint" title="Permalink to this definition">¶</a></dt>
-<dd><p>Delay object for analytically-specified turning points
-Requires turn demand (veh/hr), left turn dummy (0=right, 1=left), number of turn lanes, ped demand (peds/hr),
-crossing distance (lane-equivalents), exit lanes (lanes),
-cycle length (sec), veh turn green phase (sec), ped crossing phase (sec) [assumed to maximize overlap]</p>
-</dd></dl>
-
-<dl class="class">
-<dt>
-<em class="property">class </em><tt class="descclassname">generate_delay_distribution.</tt><tt class="descname">ArbitraryDistribution</tt><big>(</big><em>increase_prob=</em><span class="optional">[</span><span class="optional">]</span>, <em>reduction_prob=</em><span class="optional">[</span><span class="optional">]</span><big>)</big></dt>
-<dd><p>Duration object for arbitrarily distruted timeframes</p>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p class="last">This distribution can capture negative values of delay (i.e. reductions in delay).</p>
 </div>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p class="last">The sum of all probabilities should be 1 (but will be rescaled if they are approximate).
-Probabilities of no increase and no reduction will both be counted and should not be provided redundantly.</p>
-</div>
-<p>Requires list of probabilities for each duration, in seconds as follows:</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>increase_prob</strong> &#8211; <tt class="docutils literal"><span class="pre">[prob_0_sec_increase,</span> <span class="pre">prob_1_sec_increase,</span> <span class="pre">prob_2_sec_increase,</span> <span class="pre">...]</span></tt></li>
-<li><strong>reduction_prob</strong> &#8211; <tt class="docutils literal"><span class="pre">[prob_0_sec_reduction,</span> <span class="pre">prob_1_sec_reduction,</span> <span class="pre">prob_2_sec_reduction,</span> <span class="pre">...]</span></tt></li>
-</ul>
-</td>
-</tr>
-</tbody>
-</table>
-<dl class="method">
-<dt>
-<tt class="descname">prob</tt><big>(</big><em>time_sec</em><big>)</big></dt>
-<dd><p>Given an integer number of seconds of delay, returns the Decimal probability
-of that many seconds of delay as modeled by this probability distribution.</p>
-</dd></dl>
-
-</dd></dl>
-
 </div>
 <div class="section" id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h2>
 <ul class="simple">
 <li><a class="reference internal" href="genindex.html"><em>Index</em></a></li>
 <li><a class="reference internal" href="py-modindex.html"><em>Module Index</em></a></li>
 <li><a class="reference internal" href="search.html"><em>Search Page</em></a></li>
 </ul>
+</div>
 </div>
 
 
@@ -275,12 +94,18 @@ of that many seconds of delay as modeled by this probability distribution.</p>
         <div class="sphinxsidebarwrapper">
   <h3><a href="#">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">Welcome to Travel Time Distribution Tool&#8217;s documentation!</a><ul>
+<li><a class="reference internal" href="#">Travel Time Distribution Tool: Welcome</a><ul>
+<li><a class="reference internal" href="#contents">Contents:</a><ul>
 </ul>
 </li>
 <li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
 </ul>
+</li>
+</ul>
 
+  <h4>Next topic</h4>
+  <p class="topless"><a href="overview.html"
+                        title="next chapter">Travel Time Distribution Tool Overview</a></p>
   <h3>This Page</h3>
   <ul class="this-page-menu">
     <li><a href="_sources/index.txt"
@@ -312,6 +137,9 @@ of that many seconds of delay as modeled by this probability distribution.</p>
         <li class="right" >
           <a href="py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
+        <li class="right" >
+          <a href="overview.html" title="Travel Time Distribution Tool Overview"
+             >next</a> |</li>
         <li><a href="#">Travel Time Distribution Tool 2.0 documentation</a> &raquo;</li> 
       </ul>
     </div>

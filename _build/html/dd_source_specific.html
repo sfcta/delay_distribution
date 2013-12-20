@@ -1,0 +1,361 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Source-Specific Delay Distributions &mdash; Travel Time Distribution Tool 2.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '2.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Travel Time Distribution Tool 2.0 documentation" href="index.html" />
+    <link rel="prev" title="Generic Delay and Event Distributions (time_count_distributions_generic)" href="time_count_distributions_generic.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="time_count_distributions_generic.html" title="Generic Delay and Event Distributions (time_count_distributions_generic)"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">Travel Time Distribution Tool 2.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="module-dd_traffic_signal">
+<span id="source-specific-delay-distributions"></span><h1>Source-Specific Delay Distributions<a class="headerlink" href="#module-dd_traffic_signal" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="delay-distribution-for-traffic-signals-dd-traffic-signal">
+<h2>Delay Distribution for Traffic Signals (dd_traffic_signal)<a class="headerlink" href="#delay-distribution-for-traffic-signals-dd-traffic-signal" title="Permalink to this headline">¶</a></h2>
+<p>Module for delay caused by traffic signals</p>
+<dl class="docutils">
+<dt>Authors:</dt>
+<dd><a class="reference external" href="mailto:teo&#37;&#52;&#48;sfcta&#46;org">teo<span>&#64;</span>sfcta<span>&#46;</span>org</a>, 12/16/2013</dd>
+</dl>
+<dl class="class">
+<dt id="dd_traffic_signal.TrafficSignal">
+<em class="property">class </em><tt class="descclassname">dd_traffic_signal.</tt><tt class="descname">TrafficSignal</tt><big>(</big><em>cycle_time</em>, <em>green_time</em>, <em>fixed_delay=Decimal('0')</em><big>)</big><a class="headerlink" href="#dd_traffic_signal.TrafficSignal" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delay object for traffic signals</p>
+<p>Requires cycle time, green time, and any fixed delay beyond waiting for green (all in seconds)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cycle_time</strong> &#8211; length of one full signal cycle, in seconds</li>
+<li><strong>green_time</strong> &#8211; length of green phase for bus or tram (per cycle), in seconds</li>
+<li><strong>fixed_delay</strong> (<em>optional, defaults to 0</em>) &#8211; fixed delay incurred beyond waiting for green phase (may apply in certain cases
+where signal is actuated by arrival of bus or tram), in seconds</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Include total of all green phases that may exist within a cycle in <tt class="docutils literal"><span class="pre">green_time</span></tt>.</p>
+</div>
+<dl class="method">
+<dt id="dd_traffic_signal.TrafficSignal.max_delay">
+<tt class="descname">max_delay</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_traffic_signal.TrafficSignal.max_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the maximum possible delay, in seconds, as modeled by this probability
+distribution.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_traffic_signal.TrafficSignal.min_delay">
+<tt class="descname">min_delay</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_traffic_signal.TrafficSignal.min_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the minimum possible delay, in seconds, as modeled by this probability
+distribution. (0 seconds for this distribution as written.)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_traffic_signal.TrafficSignal.prob">
+<tt class="descname">prob</tt><big>(</big><em>delay_sec</em><big>)</big><a class="headerlink" href="#dd_traffic_signal.TrafficSignal.prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an integer number of seconds of delay, returns the Decimal probability
+of that many seconds of delay as modeled by this probability distribution.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<span class="target" id="module-dd_train_station"></span><div class="section" id="delay-distribution-for-train-stations-and-bus-stops-dd-train-station">
+<h2>Delay Distribution for Train Stations and Bus Stops (dd_train_station)<a class="headerlink" href="#delay-distribution-for-train-stations-and-bus-stops-dd-train-station" title="Permalink to this headline">¶</a></h2>
+<p>Module for delay caused by dwell time at train stations or bus stops</p>
+<dl class="docutils">
+<dt>Authors:</dt>
+<dd><a class="reference external" href="mailto:teo&#37;&#52;&#48;sfcta&#46;org">teo<span>&#64;</span>sfcta<span>&#46;</span>org</a>, 12/16/2013</dd>
+</dl>
+<dl class="class">
+<dt id="dd_train_station.TrainStation">
+<em class="property">class </em><tt class="descclassname">dd_train_station.</tt><tt class="descname">TrainStation</tt><big>(</big><em>fixed_delay</em>, <em>doors</em>, <em>board_demand</em>, <em>alight_demand</em>, <em>board_pace</em>, <em>alight_pace</em>, <em>headway_obj</em>, <em>required_stop=False</em><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delay object for train stations</p>
+<p>Requires fixed delay, hourly boardings, hourly alightings, number of doors,
+boarding time per pax per door, alighting time per pax per door,
+headway object (must have <tt class="docutils literal"><span class="pre">prob()</span></tt> function that returns the probability of given headway, in seconds, as passed).</p>
+<p>Optional: Stop requirement (defaults to <tt class="docutils literal"><span class="pre">False</span></tt>) - means the train stops even if no passengers board or alight</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>fixed_delay</strong> &#8211; Fixed delay due to stopping in station or at bus stop (seconds)</li>
+<li><strong>doors</strong> &#8211; Number of boarding and alighting doors on the train or bus</li>
+<li><strong>board_demand</strong> &#8211; Hourly boardings at this station or stop</li>
+<li><strong>alight_demand</strong> &#8211; Hourly alightings at this station or stop</li>
+<li><strong>board_pace</strong> &#8211; Boarding time per passenger per door (may vary based on size of doors or number of steps)</li>
+<li><strong>alight_pace</strong> &#8211; Alighting time per passenger per door (may vary based on size of doors or number of steps)</li>
+<li><strong>headway_obj</strong> &#8211; <p>Time distribution object for train or bus headways. Must have a <tt class="docutils literal"><span class="pre">prob()</span></tt> function
+that returns the probability of a duration, in seconds, as passed to the function,
+and a <tt class="docutils literal"><span class="pre">max_delay()</span></tt> function which returns the maximum possible duration, in seconds.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">typically <strong>headway_obj</strong> will be an instance of a delay object class, although here it is used
+for interstitial time rather than travel time</p>
+</div>
+</li>
+<li><strong>required_stop</strong> (optional, defaults to <tt class="docutils literal"><span class="pre">False</span></tt>) &#8211; set to <tt class="docutils literal"><span class="pre">True</span></tt> if the train or bus will stop at this station or stop even if
+no passengers board or alight</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">probabilities precise only as specified by APPROXIMATE_CERTAINTY in settings module</p>
+</div>
+<dl class="method">
+<dt id="dd_train_station.TrainStation.calc_pax_distrib">
+<tt class="descname">calc_pax_distrib</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation.calc_pax_distrib" title="Permalink to this definition">¶</a></dt>
+<dd><p>Internal method for calculating probability distribution of boarding and alighting passengers</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_train_station.TrainStation.calculate_delay_probs">
+<tt class="descname">calculate_delay_probs</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation.calculate_delay_probs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Internal method for calculating delay probabilities</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_train_station.TrainStation.extract_headway_probs">
+<tt class="descname">extract_headway_probs</tt><big>(</big><em>headway_obj</em><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation.extract_headway_probs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Internal method for extracting probabilities from <tt class="docutils literal"><span class="pre">headway_obj</span></tt></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_train_station.TrainStation.max_delay">
+<tt class="descname">max_delay</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation.max_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the maximum possible delay, in seconds, as modeled by this probability
+distribution.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_train_station.TrainStation.min_delay">
+<tt class="descname">min_delay</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation.min_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the minimum possible delay, in seconds, as modeled by this probability
+distribution. (0 seconds for this distribution as written.)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_train_station.TrainStation.prob">
+<tt class="descname">prob</tt><big>(</big><em>delay_sec</em><big>)</big><a class="headerlink" href="#dd_train_station.TrainStation.prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an integer number of seconds of delay, returns the Decimal probability
+of that many seconds of delay as modeled by this probability distribution.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<span class="target" id="module-dd_turning_point"></span><div class="section" id="delay-distribution-for-turning-vehicles-dd-turning-point">
+<h2>Delay Distribution for Turning Vehicles (dd_turning_point)<a class="headerlink" href="#delay-distribution-for-turning-vehicles-dd-turning-point" title="Permalink to this headline">¶</a></h2>
+<p>Module for delay caused by right-turning vehicles</p>
+<dl class="docutils">
+<dt>Authors:</dt>
+<dd><a class="reference external" href="mailto:teo&#37;&#52;&#48;sfcta&#46;org">teo<span>&#64;</span>sfcta<span>&#46;</span>org</a>, 12/16/2013</dd>
+</dl>
+<dl class="class">
+<dt id="dd_turning_point.TurningPoint">
+<em class="property">class </em><tt class="descclassname">dd_turning_point.</tt><tt class="descname">TurningPoint</tt><big>(</big><em>veh_demand</em>, <em>left_turn</em>, <em>turn_lanes</em>, <em>ped_demand</em>, <em>curb_to_curb</em>, <em>exit_lanes</em>, <em>cycle_len</em>, <em>turn_phase</em>, <em>ped_phase</em>, <em>fixed_delay=0</em><big>)</big><a class="headerlink" href="#dd_turning_point.TurningPoint" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class for delay objects for analytically-specified turning points</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Models delay due to &#8220;pedestrian friction&#8221;, i.e., turning vehicles waiting for pedestrians to cross side streets
+before completing the turn. Does not directly model delay due to deceleration, although fixed deceleration/reacceleration delay
+may be specified. This may be passed to the constructor or specified in tt_settings (tt_settings value will be used if
+no value is passed to the constructor).</p>
+</div>
+<p>Requires turn demand (veh/hr), left turn dummy (0=right, 1=left), number of turn lanes, ped demand (peds/hr),
+crossing distance (lane-equivalents), exit lanes (lanes),
+cycle length (sec), veh turn green phase (sec), ped crossing phase (sec) [assumed to maximize overlap]</p>
+<p>OPTIONAL: fixed delay experienced by bus due to turning vehicles decelerating (includes time lost to bus decelerating
+and reaccelerating) (seconds)</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>Generally, an instance of this class will be used to model delay to a through-moving bus or tram
+experienced as a result of vehicles slowing or queuing to turn from the bus or tram&#8217;s lane onto a side street.</p>
+<blockquote class="last">
+<div><ul class="simple">
+<li><em>Example</em>: If the bus/tram operates in the rightmost lane and left turns are not allowed from that lane, then an instance
+would be used to model delay due to right-turning vehicles at a given intersection.</li>
+<li><em>Example</em>: If the bus/tram operates in a single-lane, one-way street that allows both right and left turns from the same
+lane, then two instances of this class would be required per intersection, to model delay due to right-turning and
+left-turning vehicles, respectively.</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This class uses formulas to estimate delay that are based on regressions of data collected in San Francisco. Left-turn data
+were only collected for one-way to one-way streets. The same patterns may or may not hold in other locations and cases.</p>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>veh_demand</strong> &#8211; hourly rate of vehicle turns from the bus&#8217;s through street onto side streets (in the applicable direction)</li>
+<li><strong>left_turn</strong> &#8211; 0 or False to model right-turning vehicles; 1 or True to model left-turning vehicles</li>
+<li><strong>turn_lanes</strong> &#8211; number of lanes from which vehicles making the specified movement may turn (including the lane the bus/tram operates in)</li>
+<li><strong>ped_demand</strong> &#8211; hourly rate of pedestrians crossing the side street onto which vehicles turn</li>
+<li><strong>curb_to_curb</strong> &#8211; curb-to-curb crossing distance for pedestrians crossing the side street, in lane-equivalents.
+(auto or bus lane = +1, parking lane = +1, bike lane = +0.5)</li>
+<li><strong>exit_lanes</strong> &#8211; number of lanes on side street via which turning vehicles can exit the intersection. generally includes
+both mixed-use and restricted lanes that operate in the direction of turning vehicle travel. (e.g., vehicles may exit the intersection
+in a bus lane and then transition to a mixed-use lane shortly after passing the crosswalk.)</li>
+<li><strong>cycle_len</strong> &#8211; length of a full signal cycle, in seconds</li>
+<li><strong>turn_phase</strong> &#8211; duration of signal phase during which turning vehicles may turn (protected and/or permissive)</li>
+<li><strong>ped_phase</strong> &#8211; duration of signal phase during which pedestrians may cross the side street</li>
+<li><strong>fixed_delay</strong> &#8211; fixed delay experienced by bus due to turning vehicles decelerating (includes time lost to bus decelerating
+and reaccelerating) (seconds)</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Time values will be rounded to the nearest second.</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last"><tt class="docutils literal"><span class="pre">ped_phase</span></tt> and <tt class="docutils literal"><span class="pre">turn_phase</span></tt> are assumed to have maximal overlap; i.e., an intersection is assumed to have either a
+leading pedestrian interval, or a protected green phase, but not both.</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Assumes one green phase per signal cycle. Multiple green phases may be approximated by providing the combined green time.</p>
+</div>
+<dl class="method">
+<dt id="dd_turning_point.TurningPoint.max_delay">
+<tt class="descname">max_delay</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_turning_point.TurningPoint.max_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the maximum possible delay, in seconds, as modeled by this probability
+distribution.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_turning_point.TurningPoint.min_delay">
+<tt class="descname">min_delay</tt><big>(</big><big>)</big><a class="headerlink" href="#dd_turning_point.TurningPoint.min_delay" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the minimum possible delay, in seconds, as modeled by this probability
+distribution. (0 seconds for this distribution as written.)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dd_turning_point.TurningPoint.prob">
+<tt class="descname">prob</tt><big>(</big><em>delay_sec</em><big>)</big><a class="headerlink" href="#dd_turning_point.TurningPoint.prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an integer number of seconds of delay, returns the Decimal probability
+of that many seconds of delay as modeled by this probability distribution.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Source-Specific Delay Distributions</a><ul>
+<li><a class="reference internal" href="#delay-distribution-for-traffic-signals-dd-traffic-signal">Delay Distribution for Traffic Signals (dd_traffic_signal)</a></li>
+<li><a class="reference internal" href="#delay-distribution-for-train-stations-and-bus-stops-dd-train-station">Delay Distribution for Train Stations and Bus Stops (dd_train_station)</a></li>
+<li><a class="reference internal" href="#delay-distribution-for-turning-vehicles-dd-turning-point">Delay Distribution for Turning Vehicles (dd_turning_point)</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="time_count_distributions_generic.html"
+                        title="previous chapter">Generic Delay and Event Distributions (time_count_distributions_generic)</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/dd_source_specific.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="time_count_distributions_generic.html" title="Generic Delay and Event Distributions (time_count_distributions_generic)"
+             >previous</a> |</li>
+        <li><a href="index.html">Travel Time Distribution Tool 2.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Teo Wickland and Elizabeth Sall.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.
+    </div>
+  </body>
+</html>
