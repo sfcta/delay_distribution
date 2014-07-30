@@ -1,5 +1,10 @@
+:: Directory where input files live
 set RUNDIR=.
+
+:: Directory where "generate_delay_distribution.py" sits.  Usually one up from this batch file.
 set SCRIPTDIR=..
+
+:: List of scenario names that input files are labelled with.
 set ALLSCENARIOS=Scenario1 Scenario2 Scenario3
 
 for /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set thisdate=%%c%%a%%b)
